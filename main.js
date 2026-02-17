@@ -176,7 +176,7 @@ ipcMain.handle('delete-template', async (event, templateName) => {
 // Сгенерировать путевой лист (заполнить PDF и сохранить)
 ipcMain.handle('generate-waybill', async (_event, templateName, driver, waybillData) => {
   try {
-    const { PDFDocument, StandardFonts } = require('pdf-lib');
+    const { PDFDocument, StandardFonts, degrees } = require('pdf-lib');
     const fontkit = require('@pdf-lib/fontkit');
 
     // Читаем шаблон
@@ -235,13 +235,24 @@ ipcMain.handle('generate-waybill', async (_event, templateName, driver, waybillD
         for (const field of mapping.fields) {
           const page = pages[field.page] || pages[0];
           const { width, height } = page.getSize();
+          const pageRotation = page.getRotation().angle; // 0, 90, 180, 270
           const fontSize = field.fontSize || 10;
-          const x = field.pdfX !== undefined ? field.pdfX : field.xRatio * width;
+          let x = field.pdfX !== undefined ? field.pdfX : field.xRatio * width;
           let y = field.pdfY !== undefined ? field.pdfY : (1 - field.yRatio) * height;
-          y = y - fontSize;
+
+          // Baseline-коррекция зависит от поворота страницы
+          if (pageRotation === 90)       { x -= fontSize; }
+          else if (pageRotation === 270) { x += fontSize; }
+          else if (pageRotation === 180) { y += fontSize; }
+          else                           { y -= fontSize; }
+
           const text = dataValues[field.dataKey] || '';
           if (text) {
-            page.drawText(text, { x, y, size: fontSize, font: cyrFont });
+            // Поворачиваем текст обратно, чтобы он был читаемым при любой ориентации страницы
+            page.drawText(text, {
+              x, y, size: fontSize, font: cyrFont,
+              rotate: degrees(pageRotation)
+            });
             filled++;
           }
         }
