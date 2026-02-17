@@ -235,11 +235,27 @@ ipcMain.handle('generate-waybill', async (_event, templateName, driver, waybillD
         for (const field of mapping.fields) {
           const page = pages[field.page] || pages[0];
           const { width, height } = page.getSize();
+          const rotation = page.getRotation().angle;
           const fontSize = field.fontSize || 10;
-          const x = field.pdfX !== undefined ? field.pdfX : field.xRatio * width;
-          // pdfY — точка клика (верх текста), drawText рисует от baseline, сдвигаем вниз
-          let y = field.pdfY !== undefined ? field.pdfY : (1 - field.yRatio) * height;
-          y = y - fontSize;
+
+          let rawX = field.pdfX !== undefined ? field.pdfX : field.xRatio * width;
+          let rawY = field.pdfY !== undefined ? field.pdfY : (1 - field.yRatio) * height;
+
+          let x, y;
+          if (rotation === 90) {
+            x = rawY;
+            y = width - rawX - fontSize;
+          } else if (rotation === 180) {
+            x = width - rawX;
+            y = rawY - fontSize;
+          } else if (rotation === 270) {
+            x = height - rawY;
+            y = rawX - fontSize;
+          } else {
+            x = rawX;
+            y = rawY - fontSize;
+          }
+
           const text = dataValues[field.dataKey] || '';
           if (text) {
             page.drawText(text, { x, y, size: fontSize, font: cyrFont });
