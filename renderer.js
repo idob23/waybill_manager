@@ -224,9 +224,14 @@ function renderTemplatesList(templates) {
         templateItem.innerHTML = `
             <span>📄 ${template}</span>
             <div class="template-item-actions">
+                <button class="btn-edit-fields">⚙️ Настроить поля</button>
                 <button class="btn-delete-tpl">Удалить</button>
             </div>
         `;
+
+        templateItem.querySelector('.btn-edit-fields').addEventListener('click', () => {
+            openTemplateEditor(template);
+        });
 
         templateItem.querySelector('.btn-delete-tpl').addEventListener('click', async () => {
             if (confirm(`Удалить шаблон "${template}"?`)) {

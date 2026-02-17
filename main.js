@@ -235,11 +235,14 @@ ipcMain.handle('generate-waybill', async (_event, templateName, driver, waybillD
         for (const field of mapping.fields) {
           const page = pages[field.page] || pages[0];
           const { width, height } = page.getSize();
+          const fontSize = field.fontSize || 10;
           const x = field.pdfX !== undefined ? field.pdfX : field.xRatio * width;
-          const y = field.pdfY !== undefined ? field.pdfY : (1 - field.yRatio) * height;
+          // pdfY — точка клика (верх текста), drawText рисует от baseline, сдвигаем вниз
+          let y = field.pdfY !== undefined ? field.pdfY : (1 - field.yRatio) * height;
+          y = y - fontSize;
           const text = dataValues[field.dataKey] || '';
           if (text) {
-            page.drawText(text, { x, y, size: field.fontSize || 10, font: cyrFont });
+            page.drawText(text, { x, y, size: fontSize, font: cyrFont });
             filled++;
           }
         }
