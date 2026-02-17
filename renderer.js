@@ -64,7 +64,8 @@ const elements = {
     waybillDataForm: document.getElementById('waybillDataForm'),
 
     // Поля модального окна
-    waybillDate: document.getElementById('waybillDate'),
+    waybillDateFrom: document.getElementById('waybillDateFrom'),
+    waybillDateTo: document.getElementById('waybillDateTo'),
     waybillNumber: document.getElementById('waybillNumber'),
     vehicleModel: document.getElementById('vehicleModel'),
     vehicleNumber: document.getElementById('vehicleNumber'),
@@ -223,14 +224,9 @@ function renderTemplatesList(templates) {
         templateItem.innerHTML = `
             <span>📄 ${template}</span>
             <div class="template-item-actions">
-                <button class="btn-edit-fields">⚙️ Настроить поля</button>
                 <button class="btn-delete-tpl">Удалить</button>
             </div>
         `;
-
-        templateItem.querySelector('.btn-edit-fields').addEventListener('click', () => {
-            openTemplateEditor(template);
-        });
 
         templateItem.querySelector('.btn-delete-tpl').addEventListener('click', async () => {
             if (confirm(`Удалить шаблон "${template}"?`)) {
@@ -467,7 +463,8 @@ function openWaybillModal() {
 
     // Устанавливаем сегодняшнюю дату по умолчанию
     const today = new Date().toISOString().split('T')[0];
-    elements.waybillDate.value = today;
+    elements.waybillDateFrom.value = today;
+    elements.waybillDateTo.value = today;
 
     // Генерируем номер путевого листа (дата + инициалы)
     const dateStr = new Date().toLocaleDateString('ru-RU').replace(/\./g, '');
@@ -476,6 +473,14 @@ function openWaybillModal() {
 
     // Показываем модальное окно
     elements.waybillModal.style.display = 'flex';
+}
+
+// Форматировать диапазон дат (или одну дату если совпадают)
+function formatDateRange(from, to) {
+    const fmt = d => d ? d.split('-').reverse().join('.') : '';
+    if (!from) return fmt(to);
+    if (!to || from === to) return fmt(from);
+    return `${fmt(from)} - ${fmt(to)}`;
 }
 
 // Закрыть модальное окно
@@ -491,7 +496,7 @@ async function generateWaybill(e) {
     
     // Собираем данные из формы
     const waybillData = {
-        date: elements.waybillDate.value,
+        date: formatDateRange(elements.waybillDateFrom.value, elements.waybillDateTo.value),
         number: elements.waybillNumber.value,
         vehicleModel: elements.vehicleModel.value.trim(),
         vehicleNumber: elements.vehicleNumber.value.trim(),
@@ -533,8 +538,8 @@ async function generateWaybill(e) {
                 alert(`Путевой лист создан!\nЗаполнено полей: ${result.fieldsFilled}\nФайл: ${result.fileName}`);
             } else if (result.fieldsFound === 0) {
                 alert(
-                    `Путевой лист сохранён, но шаблон не содержит настроенных полей.\n\n` +
-                    `Нажмите "⚙️ Настроить поля" на шаблоне, чтобы указать где вставлять данные.\n\n` +
+                    `Путевой лист сохранён, но данные не были вставлены.\n` +
+                    `Убедитесь, что шаблон содержит AcroForm-поля с нужными именами.\n\n` +
                     `Файл: ${result.fileName}`
                 );
             } else {

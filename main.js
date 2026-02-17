@@ -176,7 +176,7 @@ ipcMain.handle('delete-template', async (event, templateName) => {
 // Сгенерировать путевой лист (заполнить PDF и сохранить)
 ipcMain.handle('generate-waybill', async (_event, templateName, driver, waybillData) => {
   try {
-    const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+    const { PDFDocument, StandardFonts } = require('pdf-lib');
     const fontkit = require('@pdf-lib/fontkit');
 
     // Читаем шаблон
@@ -255,7 +255,7 @@ ipcMain.handle('generate-waybill', async (_event, templateName, driver, waybillD
 
     // Заполнение AcroForm-полей: читаем координаты из виджетов,
     // рисуем текст напрямую на странице, затем удаляем все виджет-аннотации.
-    const { PDFName, PDFArray, PDFNumber } = require('pdf-lib');
+    const { PDFName, PDFArray } = require('pdf-lib');
     const form = pdfDoc.getForm();
     const fields = form.getFields();
     const pages = pdfDoc.getPages();
@@ -306,12 +306,6 @@ ipcMain.handle('generate-waybill', async (_event, templateName, driver, waybillD
                   }
                 } catch (_) {}
                 const page = pages[pageIdx] || pages[0];
-                // Закрашиваем белым поверх фона/рамки поля (LibreOffice запекает их в PDF)
-                page.drawRectangle({
-                  x: rect.x - 1, y: rect.y - 1,
-                  width: rect.width + 2, height: rect.height + 2,
-                  color: rgb(1, 1, 1), borderWidth: 0
-                });
                 // Вертикальное выравнивание текста по центру поля
                 const y = rect.y + (rect.height - fontSize) / 2;
                 page.drawText(text, { x: rect.x + 2, y, size: fontSize, font: cyrFont });
@@ -324,7 +318,7 @@ ipcMain.handle('generate-waybill', async (_event, templateName, driver, waybillD
       }
     });
 
-    // Скрываем все виджет-аннотации через флаг Hidden (F=2)
+    // Физически удаляем Widget-аннотации из массива Annots каждой страницы
     for (const page of pages) {
       try {
         const annotsRef = page.node.get(PDFName.of('Annots'));
@@ -333,19 +327,36 @@ ipcMain.handle('generate-waybill', async (_event, templateName, driver, waybillD
           ? annotsRef
           : pdfDoc.context.lookup(annotsRef);
         if (!(annots instanceof PDFArray)) continue;
+
+        const keepIndices = [];
         for (let i = 0; i < annots.size(); i++) {
           try {
             const annotRef = annots.get(i);
             const annot = pdfDoc.context.lookup(annotRef);
             if (!annot) continue;
             const subtype = annot.get(PDFName.of('Subtype'));
-            if (subtype && subtype.encodedName === '/Widget') {
-              annot.set(PDFName.of('F'), PDFNumber.of(2)); // Hidden
+            if (!subtype || subtype.encodedName !== '/Widget') {
+              keepIndices.push(i);
             }
-          } catch (_) {}
+          } catch (_) {
+            keepIndices.push(i);
+          }
+        }
+
+        if (keepIndices.length === 0) {
+          page.node.delete(PDFName.of('Annots'));
+        } else {
+          const newAnnots = pdfDoc.context.obj([]);
+          for (const idx of keepIndices) {
+            newAnnots.push(annots.get(idx));
+          }
+          page.node.set(PDFName.of('Annots'), newAnnots);
         }
       } catch (_) {}
     }
+
+    // Удаляем AcroForm из корня документа — PDF-просмотрщик не будет рендерить поля формы
+    try { pdfDoc.catalog.delete(PDFName.of('AcroForm')); } catch (_) {}
 
     const modifiedPdfBytes = await pdfDoc.save();
     const timestamp = new Date().toISOString().replace(/:/g, '-').split('.')[0];

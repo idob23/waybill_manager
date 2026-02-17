@@ -243,8 +243,12 @@
             <form id="waybillDataForm" class="waybill-data-form">
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="waybillDate">Дата путевого листа *</label>
-                        <input type="date" id="waybillDate" required class="form-control">
+                        <label>Срок действия путевого листа *</label>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="date" id="waybillDateFrom" required class="form-control">
+                            <span style="white-space: nowrap;">—</span>
+                            <input type="date" id="waybillDateTo" required class="form-control">
+                        </div>
                     </div>
 
                     <div class="form-group">
