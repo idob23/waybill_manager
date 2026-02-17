@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Менеджер путевых листов</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="node_modules/pdfjs-dist/build/pdf.js"></script>
+</head>
+<body>
+    <!-- Главный контейнер приложения -->
+    <div class="app-container">
+        
+        <!-- Боковая панель со списком водителей -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>Водители</h2>
+                <button id="addDriverBtn" class="btn btn-primary">+ Добавить</button>
+            </div>
+            
+            <!-- Поиск по водителям -->
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Поиск водителя...">
+            </div>
+            
+            <!-- Список водителей (заполняется динамически) -->
+            <div id="driversList" class="drivers-list">
+                <!-- Водители будут добавлены через JavaScript -->
+            </div>
+        </aside>
+
+        <!-- Основная область контента -->
+        <main class="main-content">
+            
+            <!-- Экран приветствия (показывается когда ничего не выбрано) -->
+            <div id="welcomeScreen" class="welcome-screen">
+                <h1>Менеджер путевых листов</h1>
+                <p>Выберите водителя из списка или добавьте нового</p>
+
+                <!-- Быстрые действия -->
+                <div style="margin-bottom: 30px;">
+                    <button id="openFolderBtnWelcome" class="btn btn-primary" style="font-size: 16px; padding: 15px 30px;">
+                        📁 Открыть папку с путевыми листами
+                    </button>
+                </div>
+
+                <!-- Секция управления шаблонами -->
+                <div class="templates-section">
+                    <h3>Шаблоны путевых листов</h3>
+                    <button id="uploadTemplateBtn" class="btn btn-secondary">📁 Загрузить шаблон PDF</button>
+                    <div id="templatesList" class="templates-list">
+                        <!-- Список шаблонов будет заполнен через JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Экран просмотра информации о водителе -->
+            <div id="driverDetailScreen" class="driver-detail-screen" style="display: none;">
+                <div class="detail-header">
+                    <button id="backToWelcomeBtn" class="btn btn-secondary">← Назад</button>
+                    <h2 id="driverName">Имя водителя</h2>
+                    <div class="detail-actions">
+                        <button id="editDriverBtn" class="btn btn-secondary">✏️ Редактировать</button>
+                        <button id="deleteDriverBtn" class="btn btn-danger">🗑️ Удалить</button>
+                    </div>
+                </div>
+
+                <!-- Информация о водителе -->
+                <div class="driver-info">
+                    <div class="info-row">
+                        <span class="info-label">ФИО:</span>
+                        <span id="detailFullName" class="info-value"></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Вод. удостоверение:</span>
+                        <span id="detailLicense" class="info-value"></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Дата выдачи ВУ:</span>
+                        <span id="detailLicenseDate" class="info-value"></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">СНИЛС:</span>
+                        <span id="detailSnils" class="info-value"></span>
+                    </div>
+                </div>
+
+                <!-- Генерация путевого листа -->
+                <div class="waybill-section">
+                    <h3>Создать путевой лист</h3>
+                    <div class="waybill-form">
+                        <select id="templateSelect" class="form-control">
+                            <option value="">Выберите шаблон...</option>
+                        </select>
+                        <button id="generateWaybillBtn" class="btn btn-primary">📄 Сгенерировать путевой лист</button>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <button id="openFolderBtn" class="btn btn-secondary">📁 Открыть папку с путевыми листами</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Форма добавления/редактирования водителя -->
+            <div id="driverFormScreen" class="driver-form-screen" style="display: none;">
+                <div class="form-header">
+                    <h2 id="formTitle">Добавить водителя</h2>
+                    <button id="cancelFormBtn" class="btn btn-secondary">✖️ Отмена</button>
+                </div>
+
+                <form id="driverForm" class="driver-form">
+                    <!-- Фамилия -->
+                    <div class="form-group">
+                        <label for="lastName">Фамилия *</label>
+                        <input type="text" id="lastName" required class="form-control">
+                    </div>
+
+                    <!-- Имя -->
+                    <div class="form-group">
+                        <label for="firstName">Имя *</label>
+                        <input type="text" id="firstName" required class="form-control">
+                    </div>
+
+                    <!-- Отчество -->
+                    <div class="form-group">
+                        <label for="middleName">Отчество</label>
+                        <input type="text" id="middleName" class="form-control">
+                    </div>
+
+                    <!-- Серия ВУ -->
+                    <div class="form-group">
+                        <label for="licenseSerial">Серия ВУ *</label>
+                        <input type="text" id="licenseSerial" required class="form-control" placeholder="12 34">
+                    </div>
+
+                    <!-- Номер ВУ -->
+                    <div class="form-group">
+                        <label for="licenseNumber">Номер ВУ *</label>
+                        <input type="text" id="licenseNumber" required class="form-control" placeholder="567890">
+                    </div>
+
+                    <!-- Дата выдачи ВУ -->
+                    <div class="form-group">
+                        <label for="licenseDate">Дата выдачи ВУ</label>
+                        <input type="date" id="licenseDate" class="form-control">
+                    </div>
+
+                    <!-- СНИЛС -->
+                    <div class="form-group">
+                        <label for="snils">СНИЛС</label>
+                        <input type="text" id="snils" class="form-control" placeholder="123-456-789 00">
+                    </div>
+
+                    <!-- Кнопки действий -->
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">💾 Сохранить</button>
+                        <button type="button" id="cancelFormBtn2" class="btn btn-secondary">Отмена</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Редактор маппинга полей шаблона -->
+            <div id="templateEditorScreen" class="template-editor-screen" style="display: none;">
+                <div class="editor-header">
+                    <button id="editorBackBtn" class="btn btn-secondary">← Назад</button>
+                    <h2>Поля: <span id="editorTemplateName"></span></h2>
+                    <button id="saveFieldMappingBtn" class="btn btn-primary">💾 Сохранить маппинг</button>
+                </div>
+                <div class="editor-body">
+                    <!-- Левая панель управления -->
+                    <div class="editor-controls">
+                        <div class="editor-section">
+                            <h3>Добавить поле</h3>
+                            <select id="fieldTypeSelect" class="form-control">
+                                <option value="">-- выберите поле --</option>
+                                <optgroup label="Водитель">
+                                    <option value="fio">ФИО полностью</option>
+                                    <option value="lastName">Фамилия</option>
+                                    <option value="firstName">Имя</option>
+                                    <option value="middleName">Отчество</option>
+                                    <option value="license">Водительское удостоверение</option>
+                                    <option value="category">Категория прав</option>
+                                    <option value="snils">СНИЛС</option>
+                                    <option value="tabNumber">Табельный номер</option>
+                                    <option value="driverClass">Класс водителя</option>
+                                    <option value="experience">Стаж работы</option>
+                                </optgroup>
+                                <optgroup label="Путевой лист">
+                                    <option value="date">Дата</option>
+                                    <option value="number">Номер</option>
+                                    <option value="vehicleModel">Марка ТС</option>
+                                    <option value="vehicleNumber">Гос. номер ТС</option>
+                                    <option value="departurePoint">Пункт отправления</option>
+                                    <option value="destination">Пункт назначения</option>
+                                    <option value="departureTime">Время выезда</option>
+                                    <option value="returnTime">Время возвращения</option>
+                                    <option value="odometerStart">Одометр (выезд)</option>
+                                    <option value="odometerEnd">Одометр (возврат)</option>
+                                    <option value="route">Маршрут / Задание</option>
+                                </optgroup>
+                            </select>
+                            <div class="font-size-row">
+                                <label>Размер шрифта (пт):</label>
+                                <input type="number" id="editorFontSize" class="form-control" value="10" min="6" max="36" step="1">
+                            </div>
+                            <p class="editor-hint">Выберите поле, затем кликните по нужному месту на странице</p>
+                        </div>
+
+                        <div class="editor-section">
+                            <h3>Размещённые поля <span id="fieldsCount" class="fields-badge">0</span></h3>
+                            <div id="placedFieldsList" class="placed-fields-list">
+                                <p class="editor-empty">Нет размещённых полей</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Правая область с PDF -->
+                    <div class="editor-canvas-area">
+                        <div class="page-nav">
+                            <button id="prevPageBtn" class="btn btn-secondary">← Пред.</button>
+                            <span id="pageInfo">Стр. 1 из 1</span>
+                            <button id="nextPageBtn" class="btn btn-secondary">След. →</button>
+                        </div>
+                        <div class="canvas-scroll-wrapper">
+                            <div class="canvas-wrapper" id="canvasWrapper">
+                                <canvas id="pdfCanvas"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Модальное окно для редактирования данных путевого листа -->
+    <div id="waybillModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Редактирование данных путевого листа</h2>
+                <button id="closeModalBtn" class="btn-close">✖️</button>
+            </div>
+
+            <form id="waybillDataForm" class="waybill-data-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="waybillDate">Дата путевого листа *</label>
+                        <input type="date" id="waybillDate" required class="form-control">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="waybillNumber">Номер путевого листа</label>
+                        <input type="text" id="waybillNumber" class="form-control" placeholder="Автоматически">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="vehicleModel">Марка ТС</label>
+                        <input type="text" id="vehicleModel" class="form-control" placeholder="напр. ГАЗель">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="vehicleNumber">Гос. номер ТС</label>
+                        <input type="text" id="vehicleNumber" class="form-control" placeholder="А123БВ 777">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="departurePoint">Пункт отправления</label>
+                        <input type="text" id="departurePoint" class="form-control">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="destination">Пункт назначения</label>
+                        <input type="text" id="destination" class="form-control">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="departureTime">Время выезда</label>
+                        <input type="time" id="departureTime" class="form-control">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="returnTime">Время возвращения</label>
+                        <input type="time" id="returnTime" class="form-control">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="odometerStart">Показания одометра (выезд), км</label>
+                        <input type="number" id="odometerStart" class="form-control" min="0">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="odometerEnd">Показания одометра (возврат), км</label>
+                        <input type="number" id="odometerEnd" class="form-control" min="0">
+                    </div>
+                </div>
+
+                <div class="form-group full-width">
+                    <label for="route">Маршрут / Задание</label>
+                    <textarea id="route" class="form-control" rows="3" placeholder="Описание маршрута или задания"></textarea>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">✅ Сгенерировать</button>
+                    <button type="button" id="cancelModalBtn" class="btn btn-secondary">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Подключаем JavaScript -->
+    <script src="renderer.js"></script>
+</body>
+</html>
