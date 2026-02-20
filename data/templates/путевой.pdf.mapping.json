@@ -1,0 +1,49 @@
+{
+  "fields": [
+    {
+      "id": "1771324599389",
+      "dataKey": "fio",
+      "label": "ФИО",
+      "page": 0,
+      "pdfX": 122,
+      "pdfY": 213.33333333333334,
+      "fontSize": 12
+    },
+    {
+      "id": "1771324610085",
+      "dataKey": "snils",
+      "label": "СНИЛС",
+      "page": 0,
+      "pdfX": 140,
+      "pdfY": 598.6666666666666,
+      "fontSize": 12
+    },
+    {
+      "id": "1771324620710",
+      "dataKey": "license",
+      "label": "Вод. удостоверение",
+      "page": 0,
+      "pdfX": 140,
+      "pdfY": 240.66666666666666,
+      "fontSize": 12
+    },
+    {
+      "id": "1771324672617",
+      "dataKey": "date",
+      "label": "Дата",
+      "page": 0,
+      "pdfX": 96,
+      "pdfY": 262.6666666666667,
+      "fontSize": 12
+    },
+    {
+      "id": "1771324683074",
+      "dataKey": "number",
+      "label": "Номер ПЛ",
+      "page": 0,
+      "pdfX": 79.33333333333333,
+      "pdfY": 170,
+      "fontSize": 12
+    }
+  ]
+}

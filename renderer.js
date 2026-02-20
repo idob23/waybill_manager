@@ -471,13 +471,15 @@ function openWaybillModal() {
     elements.waybillDateFrom.value = today;
     elements.waybillDateTo.value = today;
 
-    // Генерируем номер путевого листа (дата + инициалы)
-    const dateStr = new Date().toLocaleDateString('ru-RU').replace(/\./g, '');
-    const initials = currentDriver.lastName.charAt(0) + currentDriver.firstName.charAt(0);
-    elements.waybillNumber.value = `${dateStr}-${initials}-${Date.now().toString().slice(-4)}`;
+    // Предлагаем следующий номер из счётчика (можно вручную изменить)
+    const nextNum = parseInt(localStorage.getItem('waybill_counter') || '0') + 1;
+    elements.waybillNumber.value = String(nextNum).padStart(3, '0');
 
     // Показываем модальное окно
     elements.waybillModal.style.display = 'flex';
+
+    // Явно переводим фокус на поле номера (иначе Electron может оставить фокус в DevTools)
+    setTimeout(() => elements.waybillNumber.focus(), 50);
 }
 
 // Форматировать диапазон дат (или одну дату если совпадают)
@@ -539,6 +541,12 @@ async function generateWaybill(e) {
         const result = await api.generateWaybill(templateName, currentDriver, waybillData);
 
         if (result.success) {
+            // Фиксируем счётчик номеров (сохраняем числовую часть введённого номера)
+            const usedNum = parseInt(waybillData.number);
+            if (!isNaN(usedNum)) {
+                const stored = parseInt(localStorage.getItem('waybill_counter') || '0');
+                if (usedNum >= stored) localStorage.setItem('waybill_counter', usedNum);
+            }
             if (result.usedMapping) {
                 alert(`Путевой лист создан!\nЗаполнено полей: ${result.fieldsFilled}\nФайл: ${result.fileName}`);
             } else if (result.fieldsFound === 0) {
@@ -647,6 +655,7 @@ let editorMapping = { fields: [] };
 let pdfJsDoc = null;
 let pdfCurrentPage = 1;
 let pdfTotalPages = 1;
+let isDraggingMarker = false; // блокирует handleCanvasClick во время перетаскивания
 
 // Метки полей для отображения
 const FIELD_LABELS = {
@@ -657,6 +666,31 @@ const FIELD_LABELS = {
     vehicleNumber: 'Гос. номер', departurePoint: 'Отправление',
     destination: 'Назначение', departureTime: 'Выезд', returnTime: 'Возврат',
     odometerStart: 'Одометр↑', odometerEnd: 'Одометр↓', route: 'Маршрут'
+};
+
+// Примеры текста для предпросмотра в редакторе
+const FIELD_SAMPLES = {
+    fio: 'Иванов Иван Иванович',
+    lastName: 'Иванов',
+    firstName: 'Иван',
+    middleName: 'Иванович',
+    license: '12 34 567890 01.01.2020',
+    category: 'B',
+    snils: '123-456-789 00',
+    tabNumber: '42',
+    driverClass: '2',
+    experience: '10',
+    date: '01.01.2025 — 31.01.2025',
+    number: '001',
+    vehicleModel: 'ГАЗель Next',
+    vehicleNumber: 'А123БВ777',
+    departurePoint: 'г. Москва',
+    destination: 'г. Санкт-Петербург',
+    departureTime: '08:00',
+    returnTime: '18:00',
+    odometerStart: '12345',
+    odometerEnd: '12567',
+    route: 'Москва — Санкт-Петербург'
 };
 
 // Открыть редактор для шаблона
@@ -725,7 +759,7 @@ function updatePageNav() {
 
 // Отрисовать маркеры полей на канвасе
 async function renderFieldMarkers() {
-    elements.canvasWrapper.querySelectorAll('.field-marker').forEach(m => m.remove());
+    elements.canvasWrapper.querySelectorAll('.field-marker, .field-preview-text').forEach(m => m.remove());
     if (!pdfJsDoc) return;
 
     const currentPageFields = editorMapping.fields.filter(f => (f.page + 1) === pdfCurrentPage);
@@ -733,19 +767,94 @@ async function renderFieldMarkers() {
 
     const page = await pdfJsDoc.getPage(pdfCurrentPage);
     const viewport = page.getViewport({ scale: 1.5 });
+    const pageRotation = page.rotate || 0;
 
     currentPageFields.forEach(field => {
         // Конвертируем PDF-координаты обратно в canvas-координаты
         const [canvasX, canvasY] = viewport.convertToViewportPoint(field.pdfX, field.pdfY);
+        const fs = field.fontSize || 10;
+        const canvasFontSize = fs * 1.5;
 
+        // Применяем ту же поправку baseline, что и main.js при drawText,
+        // чтобы превью точно совпало с итоговым положением текста в PDF
+        let correctedPdfX = field.pdfX;
+        let correctedPdfY = field.pdfY;
+        if (pageRotation === 90)       correctedPdfX -= fs;
+        else if (pageRotation === 270) correctedPdfX += fs;
+        else if (pageRotation === 180) correctedPdfY += fs;
+        else                           correctedPdfY -= fs;
+        const [previewX, previewY] = viewport.convertToViewportPoint(correctedPdfX, correctedPdfY);
+
+        // Предпросмотр текста — отображает пример данных в нужном масштабе
+        const preview = document.createElement('div');
+        preview.className = 'field-preview-text';
+        preview.textContent = FIELD_SAMPLES[field.dataKey] || (FIELD_LABELS[field.dataKey] || field.dataKey);
+        preview.style.left = previewX + 'px';
+        preview.style.top = previewY + 'px';
+        preview.style.fontSize = canvasFontSize + 'px';
+        elements.canvasWrapper.appendChild(preview);
+
+        // Метка с именем поля и кнопкой удаления (на исходной точке клика)
         const marker = document.createElement('div');
         marker.className = 'field-marker';
         marker.textContent = FIELD_LABELS[field.dataKey] || field.dataKey;
         marker.style.left = canvasX + 'px';
         marker.style.top = canvasY + 'px';
-        marker.title = 'Кликни чтобы удалить';
+        marker.title = 'Тяни чтобы переместить • Клик чтобы удалить';
 
+        // --- Drag-and-drop ---
+        marker.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+            let wasDragged = false;
+            const startMouseX = e.clientX;
+            const startMouseY = e.clientY;
+            const startLeft   = parseFloat(marker.style.left);
+            const startTop    = parseFloat(marker.style.top);
+            const startPrevX  = parseFloat(preview.style.left);
+            const startPrevY  = parseFloat(preview.style.top);
+
+            const onMove = (ev) => {
+                const dx = ev.clientX - startMouseX;
+                const dy = ev.clientY - startMouseY;
+                if (!wasDragged && Math.abs(dx) + Math.abs(dy) > 4) {
+                    wasDragged = true;
+                    isDraggingMarker = true;
+                    marker.classList.add('dragging');
+                }
+                if (wasDragged) {
+                    marker.style.left  = (startLeft  + dx) + 'px';
+                    marker.style.top   = (startTop   + dy) + 'px';
+                    preview.style.left = (startPrevX + dx) + 'px';
+                    preview.style.top  = (startPrevY + dy) + 'px';
+                }
+            };
+
+            const onUp = async () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                marker.classList.remove('dragging');
+                if (!wasDragged) return;
+                // Конвертируем новую canvas-позицию метки обратно в PDF-координаты
+                const newCanvasX = parseFloat(marker.style.left);
+                const newCanvasY = parseFloat(marker.style.top);
+                const [newPdfX, newPdfY] = viewport.convertToPdfPoint(newCanvasX, newCanvasY);
+                const idx = editorMapping.fields.findIndex(f => f.id === field.id);
+                if (idx !== -1) {
+                    editorMapping.fields[idx].pdfX = newPdfX;
+                    editorMapping.fields[idx].pdfY = newPdfY;
+                }
+                await renderFieldMarkers();
+                renderPlacedFieldsList();
+                setTimeout(() => { isDraggingMarker = false; }, 0);
+            };
+
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+
+        // Клик для удаления (только если не было перетаскивания)
         marker.addEventListener('click', (e) => {
+            if (isDraggingMarker) return;
             e.stopPropagation();
             editorMapping.fields = editorMapping.fields.filter(f => f.id !== field.id);
             renderFieldMarkers();
@@ -786,6 +895,7 @@ function renderPlacedFieldsList() {
 
 // Поставить маркер по клику на канвас
 async function handleCanvasClick(e) {
+    if (isDraggingMarker) return; // игнорируем клик после перетаскивания
     const selectedKey = elements.fieldTypeSelect.value;
     if (!selectedKey) {
         alert('Сначала выберите поле из списка слева');

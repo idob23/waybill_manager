@@ -3,19 +3,31 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+// Для portable-сборки: все данные рядом с .exe, а не в %AppData%
+// electron-builder portable распаковывает приложение во временную папку,
+// но задаёт PORTABLE_EXECUTABLE_DIR = реальная папка с .exe (флешка/диск)
+// Это нужно сделать ДО app.whenReady()
+const appRootDir = app.isPackaged
+  ? (process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath))
+  : __dirname;
+
+if (app.isPackaged) {
+  // Chromium/Electron-данные (localStorage и т.п.) тоже рядом с .exe
+  app.setPath('userData', path.join(appRootDir, 'AppData'));
+}
+
 let mainWindow;
 
 // Путь к папке с данными
-const dataPath = app.isPackaged 
-  ? path.join(process.resourcesPath, 'data')
-  : path.join(__dirname, 'data');
+const dataPath = path.join(appRootDir, 'data');
+const generatedDir = path.join(appRootDir, 'generated');
 
 // Создаем необходимые папки при запуске
 function createDataFolders() {
   const folders = [
     dataPath,
     path.join(dataPath, 'templates'),
-    path.join(__dirname, 'generated')
+    generatedDir
   ];
   
   folders.forEach(folder => {
@@ -145,7 +157,7 @@ ipcMain.handle('save-waybill', async (event, pdfBytes, driverName) => {
   try {
     const timestamp = new Date().toISOString().replace(/:/g, '-').split('.')[0];
     const fileName = `${driverName}_${timestamp}.pdf`;
-    const generatedDir = path.join(__dirname, 'generated');
+  
     const filePath = path.join(generatedDir, fileName);
     
     fs.writeFileSync(filePath, Buffer.from(pdfBytes));
@@ -158,7 +170,7 @@ ipcMain.handle('save-waybill', async (event, pdfBytes, driverName) => {
 // Открыть папку с файлами
 ipcMain.handle('open-generated-folder', async () => {
   const { shell } = require('electron');
-  const generatedDir = path.join(__dirname, 'generated');
+
   shell.openPath(generatedDir);
 });
 
@@ -260,7 +272,7 @@ ipcMain.handle('generate-waybill', async (_event, templateName, driver, waybillD
         const modifiedPdfBytes = await pdfDoc.save();
         const timestamp = new Date().toISOString().replace(/:/g, '-').split('.')[0];
         const fileName = `${driver.lastName}_${driver.firstName}_${timestamp}.pdf`;
-        const filePath = path.join(__dirname, 'generated', fileName);
+        const filePath = path.join(generatedDir, fileName);
         fs.writeFileSync(filePath, modifiedPdfBytes);
         return { success: true, filePath, fileName, usedMapping: true, fieldsFilled: filled };
       }
@@ -374,7 +386,7 @@ ipcMain.handle('generate-waybill', async (_event, templateName, driver, waybillD
     const modifiedPdfBytes = await pdfDoc.save();
     const timestamp = new Date().toISOString().replace(/:/g, '-').split('.')[0];
     const fileName = `${driver.lastName}_${driver.firstName}_${timestamp}.pdf`;
-    const filePath = path.join(__dirname, 'generated', fileName);
+    const filePath = path.join(generatedDir, fileName);
     fs.writeFileSync(filePath, modifiedPdfBytes);
     return { success: true, filePath, fileName, fieldsFound: fields.length, fieldsFilled: filledCount, fieldNames: fields.map(f => f.getName()) };
   } catch (error) {

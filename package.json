@@ -26,9 +26,23 @@
   "build": {
     "appId": "com.waybill.manager",
     "productName": "Менеджер путевых листов",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "index.html",
+      "styles.css",
+      "node_modules/**/*",
+      "!node_modules/.cache/**",
+      "!data/**",
+      "!generated/**",
+      "!dist/**"
+    ],
+    "asarUnpack": [
+      "node_modules/pdfjs-dist/build/pdf.worker.js"
+    ],
     "win": {
-      "target": "portable",
-      "icon": "build/icon.ico"
+      "target": "portable"
     },
     "directories": {
       "output": "dist"

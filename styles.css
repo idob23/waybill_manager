@@ -294,6 +294,7 @@ body {
 
 /* Элементы форм */
 .form-control {
+    width: 100%;
     padding: 12px;
     border: 2px solid #bdc3c7;
     border-radius: 5px;
@@ -664,6 +665,20 @@ body {
     display: block;
 }
 
+/* Предпросмотр текста на канвасе (имитирует итоговый текст) */
+.field-preview-text {
+    position: absolute;
+    font-family: Arial, sans-serif;
+    color: rgba(41, 128, 185, 0.75);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 8;
+    line-height: 1;
+    transform: translateY(-100%);
+    user-select: none;
+    text-shadow: 0 0 3px rgba(255, 255, 255, 0.8);
+}
+
 /* Маркеры полей на канвасе */
 .field-marker {
     position: absolute;
@@ -676,12 +691,18 @@ body {
     white-space: nowrap;
     transform: translate(-50%, -100%);
     pointer-events: all;
-    cursor: pointer;
+    cursor: grab;
     z-index: 10;
     user-select: none;
     display: flex;
     align-items: center;
     gap: 4px;
+}
+
+.field-marker.dragging {
+    cursor: grabbing;
+    background: rgba(230, 126, 34, 0.9);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
 
 .field-marker:hover {
