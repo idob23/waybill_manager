@@ -23,6 +23,13 @@
                 <input type="text" id="searchInput" placeholder="Поиск водителя...">
             </div>
             
+            <!-- Панель пакетной генерации (скрыта пока не выбраны водители) -->
+            <div id="batchPanel" class="batch-panel" style="display: none;">
+                <span id="batchCountLabel">Выбрано: 0</span>
+                <button id="batchGenerateBtn" class="btn btn-primary batch-btn">📋 Генерировать путёвки</button>
+                <button id="batchClearBtn" class="btn-batch-clear">Сбросить выбор</button>
+            </div>
+
             <!-- Список водителей (заполняется динамически) -->
             <div id="driversList" class="drivers-list">
                 <!-- Водители будут добавлены через JavaScript -->
@@ -38,9 +45,12 @@
                 <p>Выберите водителя из списка или добавьте нового</p>
 
                 <!-- Быстрые действия -->
-                <div style="margin-bottom: 30px;">
+                <div style="margin-bottom: 30px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;">
                     <button id="openFolderBtnWelcome" class="btn btn-primary" style="font-size: 16px; padding: 15px 30px;">
                         📁 Открыть папку с путевыми листами
+                    </button>
+                    <button id="vehiclesBtn" class="btn btn-secondary" style="font-size: 16px; padding: 15px 30px;">
+                        🚛 Список техники
                     </button>
                 </div>
 
@@ -269,6 +279,13 @@
                     </div>
                 </div>
 
+                <div class="form-group full-width">
+                    <label for="vehicleSelect">Выбрать ТС из списка</label>
+                    <select id="vehicleSelect" class="form-control">
+                        <option value="">— или выбрать из списка техники —</option>
+                    </select>
+                </div>
+
                 <div class="form-row">
                     <div class="form-group">
                         <label for="departurePoint">Пункт отправления</label>
@@ -312,9 +329,132 @@
 
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">✅ Сгенерировать</button>
+                    <button type="button" id="generateAndPrintBtn" class="btn btn-print">🖨 Сгенерировать + отправить на печать</button>
                     <button type="button" id="cancelModalBtn" class="btn btn-secondary">Отмена</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно пакетной генерации -->
+    <div id="batchModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Пакетная генерация путевых листов</h2>
+                <button id="closeBatchModalBtn" class="btn-close">✖️</button>
+            </div>
+
+            <div id="batchDriverTabs" class="batch-driver-tabs"></div>
+
+            <form id="batchWaybillForm" class="waybill-data-form">
+                <div class="form-group full-width">
+                    <label for="batchTemplateSelect">Шаблон путевого листа *</label>
+                    <select id="batchTemplateSelect" class="form-control" required>
+                        <option value="">Выберите шаблон...</option>
+                    </select>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Срок действия *</label>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="date" id="batchDateFrom" required class="form-control">
+                            <span style="white-space: nowrap;">—</span>
+                            <input type="date" id="batchDateTo" required class="form-control">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="batchNumberStart">Начальный номер</label>
+                        <input type="text" id="batchNumberStart" class="form-control" placeholder="Автоматически">
+                    </div>
+                </div>
+
+                <div class="form-group full-width">
+                    <label for="batchVehicleSelect">Выбрать ТС из списка</label>
+                    <select id="batchVehicleSelect" class="form-control">
+                        <option value="">— или выбрать из списка техники —</option>
+                    </select>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="batchVehicleModel">Марка ТС</label>
+                        <input type="text" id="batchVehicleModel" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="batchVehicleNumber">Гос. номер ТС</label>
+                        <input type="text" id="batchVehicleNumber" class="form-control">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="batchDeparturePoint">Пункт отправления</label>
+                        <input type="text" id="batchDeparturePoint" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="batchDestination">Пункт назначения</label>
+                        <input type="text" id="batchDestination" class="form-control">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="batchDepartureTime">Время выезда</label>
+                        <input type="time" id="batchDepartureTime" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="batchReturnTime">Время возвращения</label>
+                        <input type="time" id="batchReturnTime" class="form-control">
+                    </div>
+                </div>
+
+                <div class="form-group full-width">
+                    <label for="batchRoute">Маршрут / Задание</label>
+                    <textarea id="batchRoute" class="form-control" rows="2" placeholder="Описание маршрута или задания"></textarea>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">✅ Сгенерировать для всех</button>
+                    <button type="button" id="generateBatchAndPrintBtn" class="btn btn-print">🖨 Сгенерировать для всех + отправить на печать</button>
+                    <button type="button" id="cancelBatchModalBtn" class="btn btn-secondary">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно списка техники -->
+    <div id="vehiclesModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🚛 Список техники</h2>
+                <button id="closeVehiclesModalBtn" class="btn-close">✖️</button>
+            </div>
+
+            <div class="vehicles-add-form">
+                <input type="text" id="newVehicleModel" class="form-control" placeholder="Марка ТС (напр. ГАЗель)">
+                <input type="text" id="newVehicleNumber" class="form-control" placeholder="Гос. номер (напр. А123БВ 777)">
+                <button id="addVehicleBtn" class="btn btn-primary">➕ Добавить</button>
+            </div>
+
+            <div id="vehiclesList" class="vehicles-list"></div>
+        </div>
+    </div>
+
+    <!-- Модальное окно выбора принтера -->
+    <div id="printerModal" class="modal" style="display: none; z-index: 2000;">
+        <div class="modal-content" style="max-width: 420px;">
+            <div class="modal-header">
+                <h2>🖨 Выбор принтера</h2>
+                <button id="closePrinterModalBtn" class="btn-close">✖️</button>
+            </div>
+            <div id="printersList" class="printers-list">
+                <p class="printers-loading">Загрузка принтеров...</p>
+            </div>
+            <div class="form-actions" style="margin-top: 0; padding-top: 15px;">
+                <button id="confirmPrintBtn" class="btn btn-primary" disabled>🖨 Печатать</button>
+                <button id="cancelPrintBtn" class="btn btn-secondary">Отмена</button>
+            </div>
         </div>
     </div>
 

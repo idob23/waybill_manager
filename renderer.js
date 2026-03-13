@@ -9,6 +9,12 @@ const api = window['electronAPI'];
 let drivers = []; // Массив всех водителей
 let currentDriver = null; // Текущий выбранный водитель
 let editingDriverIndex = -1; // Индекс редактируемого водителя (-1 = добавление нового)
+let selectedDriverIds = new Set(); // ID водителей для пакетной генерации
+let vehicles = []; // Массив транспортных средств
+let batchDriversData = {}; // Индивидуальные параметры каждого водителя в пакетной генерации
+let activeBatchDriverId = null; // Текущая активная вкладка в пакетном модале
+let printerModalCallback = null; // Callback после выбора принтера
+let selectedPrinterName = null; // Выбранный принтер
 
 // Получение элементов DOM
 const elements = {
@@ -57,11 +63,26 @@ const elements = {
     openFolderBtn: document.getElementById('openFolderBtn'),
     openFolderBtnWelcome: document.getElementById('openFolderBtnWelcome'),
 
+    // Пакетная генерация
+    batchPanel: document.getElementById('batchPanel'),
+    batchCountLabel: document.getElementById('batchCountLabel'),
+    batchModal: document.getElementById('batchModal'),
+    batchWaybillForm: document.getElementById('batchWaybillForm'),
+    batchTemplateSelect: document.getElementById('batchTemplateSelect'),
+    batchDriverTabs: document.getElementById('batchDriverTabs'),
+
     // Модальное окно
     waybillModal: document.getElementById('waybillModal'),
     closeModalBtn: document.getElementById('closeModalBtn'),
     cancelModalBtn: document.getElementById('cancelModalBtn'),
     waybillDataForm: document.getElementById('waybillDataForm'),
+
+    // Список техники
+    vehiclesBtn: document.getElementById('vehiclesBtn'),
+    vehiclesModal: document.getElementById('vehiclesModal'),
+    vehiclesList: document.getElementById('vehiclesList'),
+    vehicleSelect: document.getElementById('vehicleSelect'),
+    batchVehicleSelect: document.getElementById('batchVehicleSelect'),
 
     // Поля модального окна
     waybillDateFrom: document.getElementById('waybillDateFrom'),
@@ -104,7 +125,229 @@ async function init() {
     // Потом загружаем данные асинхронно
     await loadDrivers();
     await loadTemplates();
+    await loadVehicles();
     renderDriversList();
+}
+
+// ===== СПИСОК ТЕХНИКИ =====
+
+async function loadVehicles() {
+    try {
+        vehicles = await api.getVehicles();
+    } catch (err) {
+        console.error('Ошибка загрузки техники:', err);
+        vehicles = [];
+    }
+}
+
+function populateVehicleSelects() {
+    const options = vehicles.map(v =>
+        `<option value="${v.id}">${v.model} — ${v.number}</option>`
+    ).join('');
+    const placeholder = '<option value="">— или выбрать из списка техники —</option>';
+    elements.vehicleSelect.innerHTML = placeholder + options;
+    elements.batchVehicleSelect.innerHTML = placeholder + options;
+}
+
+function openVehiclesModal() {
+    renderVehiclesList();
+    elements.vehiclesModal.style.display = 'flex';
+    setTimeout(() => document.getElementById('newVehicleModel').focus(), 50);
+}
+
+function closeVehiclesModal() {
+    elements.vehiclesModal.style.display = 'none';
+}
+
+function renderVehiclesList() {
+    if (vehicles.length === 0) {
+        elements.vehiclesList.innerHTML = '<p class="vehicles-empty">Список техники пуст. Добавьте транспортное средство.</p>';
+        return;
+    }
+    elements.vehiclesList.innerHTML = vehicles.map(v => `
+        <div class="vehicle-item">
+            <div class="vehicle-info">
+                <span class="vehicle-model">${v.model}</span>
+                <span class="vehicle-number">${v.number}</span>
+            </div>
+            <button class="btn-delete-vehicle" data-id="${v.id}" title="Удалить">🗑</button>
+        </div>
+    `).join('');
+}
+
+async function addVehicle() {
+    const modelInput = document.getElementById('newVehicleModel');
+    const numberInput = document.getElementById('newVehicleNumber');
+    const model = modelInput.value.trim();
+    const number = numberInput.value.trim();
+    if (!model && !number) return;
+    const newVehicle = { id: Date.now(), model, number };
+    vehicles.push(newVehicle);
+    await api.saveVehicles(vehicles);
+    modelInput.value = '';
+    numberInput.value = '';
+    renderVehiclesList();
+    modelInput.focus();
+}
+
+async function deleteVehicle(id) {
+    vehicles = vehicles.filter(v => v.id !== id);
+    await api.saveVehicles(vehicles);
+    renderVehiclesList();
+}
+
+// ===== ПРИНТЕР =====
+
+async function openPrinterSelectModal(callback) {
+    printerModalCallback = callback;
+    selectedPrinterName = null;
+
+    const list = document.getElementById('printersList');
+    list.innerHTML = '<p class="printers-loading">Загрузка принтеров...</p>';
+    document.getElementById('confirmPrintBtn').disabled = true;
+    document.getElementById('printerModal').style.display = 'flex';
+
+    try {
+        const printers = await api.getPrinters();
+        if (printers.length === 0) {
+            list.innerHTML = '<p class="printers-empty">Принтеры не найдены</p>';
+            return;
+        }
+        list.innerHTML = printers.map(p => `
+            <div class="printer-item${p.isDefault ? ' is-default' : ''}" data-name="${p.name}">
+                <span class="printer-icon">🖨</span>
+                <div class="printer-info">
+                    <span class="printer-name">${p.displayName}</span>
+                    ${p.isDefault ? '<span class="printer-default-badge">По умолчанию</span>' : ''}
+                </div>
+            </div>
+        `).join('');
+
+        // Автовыбор принтера по умолчанию
+        const def = printers.find(p => p.isDefault);
+        if (def) selectPrinter(def.name);
+    } catch (err) {
+        list.innerHTML = `<p class="printers-empty">Ошибка загрузки принтеров: ${err.message}</p>`;
+    }
+}
+
+function selectPrinter(name) {
+    selectedPrinterName = name;
+    document.querySelectorAll('.printer-item').forEach(item => {
+        item.classList.toggle('selected', item.dataset.name === name);
+    });
+    document.getElementById('confirmPrintBtn').disabled = false;
+}
+
+function closePrinterSelectModal() {
+    document.getElementById('printerModal').style.display = 'none';
+    printerModalCallback = null;
+    selectedPrinterName = null;
+}
+
+// Сгенерировать одну путёвку + отправить на печать
+function generateAndPrint() {
+    const templateName = elements.templateSelect.value;
+    if (!templateName) { alert('Выберите шаблон путевого листа'); return; }
+    if (!currentDriver) { alert('Водитель не выбран'); return; }
+
+    const waybillData = {
+        date: formatDateRange(elements.waybillDateFrom.value, elements.waybillDateTo.value),
+        number: elements.waybillNumber.value,
+        vehicleModel: elements.vehicleModel.value.trim(),
+        vehicleNumber: elements.vehicleNumber.value.trim(),
+        departurePoint: elements.departurePoint.value.trim(),
+        destination: elements.destination.value.trim(),
+        departureTime: elements.departureTime.value,
+        returnTime: elements.returnTime.value,
+        odometerStart: elements.odometerStart.value,
+        odometerEnd: elements.odometerEnd.value,
+        route: elements.route.value.trim()
+    };
+
+    openPrinterSelectModal(async (printerName) => {
+        currentDriver.waybillTemplate = {
+            vehicleModel: waybillData.vehicleModel,
+            vehicleNumber: waybillData.vehicleNumber,
+            departurePoint: waybillData.departurePoint,
+            destination: waybillData.destination,
+            route: waybillData.route
+        };
+        const idx = drivers.findIndex(d => d.id === currentDriver.id);
+        if (idx !== -1) { drivers[idx] = currentDriver; await saveDrivers(); }
+
+        closeWaybillModal();
+
+        try {
+            const result = await api.generateWaybill(templateName, currentDriver, waybillData);
+            if (!result.success) throw new Error(result.error);
+            const printResult = await api.printFile(result.filePath, printerName);
+            if (printResult.success) {
+                alert(`Путевой лист создан и отправлен на печать!\nФайл: ${result.fileName}`);
+            } else {
+                alert(`Путевой лист создан, но ошибка печати: ${printResult.failureReason}\nФайл: ${result.fileName}`);
+            }
+            await api.openGeneratedFolder();
+        } catch (error) {
+            alert('Ошибка: ' + error.message);
+        }
+    });
+}
+
+// Пакетная генерация + печать
+async function generateBatchAndPrint() {
+    saveBatchDriverForm();
+
+    const templateName = elements.batchTemplateSelect.value;
+    if (!templateName) { alert('Выберите шаблон'); return; }
+
+    const selectedDrivers = drivers.filter(d => selectedDriverIds.has(d.id));
+    if (selectedDrivers.length === 0) return;
+
+    const driversSnapshot = { ...batchDriversData };
+
+    openPrinterSelectModal(async (printerName) => {
+        closeBatchModal();
+
+        let successCount = 0;
+        const errors = [];
+        const filePaths = [];
+
+        for (const driver of selectedDrivers) {
+            const data = driversSnapshot[driver.id] || {};
+            const waybillData = {
+                date:           formatDateRange(data.dateFrom, data.dateTo),
+                number:         data.number || '',
+                vehicleModel:   data.vehicleModel || '',
+                vehicleNumber:  data.vehicleNumber || '',
+                departurePoint: data.departurePoint || '',
+                destination:    data.destination || '',
+                departureTime:  data.departureTime || '',
+                returnTime:     data.returnTime || '',
+                route:          data.route || ''
+            };
+            try {
+                const result = await api.generateWaybill(templateName, driver, waybillData);
+                if (result.success) { successCount++; filePaths.push(result.filePath); }
+                else errors.push(`${driver.lastName} ${driver.firstName}: ${result.error}`);
+            } catch (err) {
+                errors.push(`${driver.lastName} ${driver.firstName}: ${err.message}`);
+            }
+        }
+
+        for (const fp of filePaths) {
+            await api.printFile(fp, printerName);
+        }
+
+        selectedDriverIds.clear();
+        renderDriversList();
+
+        let msg = `Готово!\nСоздано путёвок: ${successCount} из ${selectedDrivers.length}\nОтправлено на печать: ${filePaths.length}`;
+        if (errors.length > 0) msg += `\n\nОшибки:\n` + errors.join('\n');
+        alert(msg);
+
+        if (successCount > 0) await api.openGeneratedFolder();
+    });
 }
 
 // Загрузить водителей из файла
@@ -186,27 +429,196 @@ function renderDriversList(filter = '') {
         return;
     }
     
-    filteredDrivers.forEach((driver, index) => {
+    filteredDrivers.forEach((driver) => {
         const driverItem = document.createElement('div');
         driverItem.className = 'driver-item';
-        if (currentDriver && currentDriver.id === driver.id) {
-            driverItem.classList.add('active');
-        }
-        
+        if (currentDriver && currentDriver.id === driver.id) driverItem.classList.add('active');
+        if (selectedDriverIds.has(driver.id)) driverItem.classList.add('batch-selected');
+
         const licenseStr = [driver.licenseSerial, driver.licenseNumber].filter(Boolean).join(' ') || driver.license || '—';
         driverItem.innerHTML = `
-            <h3>${driver.lastName} ${driver.firstName}</h3>
-            <p>📄 В/У: ${licenseStr}</p>
-            <p>🪪 СНИЛС: ${driver.snils || '—'}</p>
+            <div class="driver-item-header">
+                <input type="checkbox" class="driver-checkbox" data-id="${driver.id}" ${selectedDriverIds.has(driver.id) ? 'checked' : ''}>
+                <div class="driver-item-info">
+                    <h3>${driver.lastName} ${driver.firstName}</h3>
+                    <p>📄 В/У: ${licenseStr}</p>
+                    <p>🪪 СНИЛС: ${driver.snils || '—'}</p>
+                </div>
+            </div>
         `;
-        
-        // Клик по водителю - показать детали
-        driverItem.addEventListener('click', () => {
+
+        // Чекбокс — переключает выборку без открытия карточки
+        const checkbox = driverItem.querySelector('.driver-checkbox');
+        checkbox.addEventListener('change', (e) => {
+            e.stopPropagation();
+            toggleDriverSelection(driver.id, checkbox.checked);
+        });
+
+        // Клик по карточке — открыть детали (не по чекбоксу)
+        driverItem.addEventListener('click', (e) => {
+            if (e.target.type === 'checkbox') return;
             selectDriver(driver);
         });
-        
+
         elements.driversList.appendChild(driverItem);
     });
+
+    updateBatchPanel();
+}
+
+// ===== ПАКЕТНАЯ ГЕНЕРАЦИЯ =====
+
+function toggleDriverSelection(driverId, checked) {
+    if (checked) selectedDriverIds.add(driverId);
+    else selectedDriverIds.delete(driverId);
+
+    // Обновить визуал только этой карточки
+    const checkbox = elements.driversList.querySelector(`[data-id="${driverId}"]`);
+    if (checkbox) checkbox.closest('.driver-item').classList.toggle('batch-selected', checked);
+
+    updateBatchPanel();
+}
+
+function updateBatchPanel() {
+    const count = selectedDriverIds.size;
+    elements.batchPanel.style.display = count > 0 ? 'flex' : 'none';
+    elements.batchCountLabel.textContent = `Выбрано: ${count}`;
+}
+
+function openBatchModal() {
+    if (selectedDriverIds.size === 0) return;
+
+    const selectedDrivers = drivers.filter(d => selectedDriverIds.has(d.id));
+    const today = new Date().toISOString().split('T')[0];
+
+    // Инициализируем индивидуальные данные для каждого водителя
+    batchDriversData = {};
+    selectedDrivers.forEach(d => {
+        batchDriversData[d.id] = {
+            dateFrom: today, dateTo: today, number: '',
+            vehicleModel: '', vehicleNumber: '',
+            departurePoint: '', destination: '',
+            departureTime: '', returnTime: '', route: ''
+        };
+    });
+    activeBatchDriverId = selectedDrivers[0].id;
+
+    elements.batchTemplateSelect.innerHTML = elements.templateSelect.innerHTML;
+    populateVehicleSelects();
+
+    renderBatchDriverTabs(selectedDrivers);
+    loadBatchDriverForm(activeBatchDriverId);
+
+    elements.batchModal.style.display = 'flex';
+    setTimeout(() => document.getElementById('batchNumberStart').focus(), 50);
+}
+
+function renderBatchDriverTabs(selectedDrivers) {
+    elements.batchDriverTabs.innerHTML = selectedDrivers.map(d => {
+        const label = `${d.lastName} ${d.firstName}${d.middleName ? ' ' + d.middleName[0] + '.' : ''}`;
+        const active = d.id === activeBatchDriverId ? ' active' : '';
+        return `<button type="button" class="batch-driver-tab${active}" data-id="${d.id}">${label}</button>`;
+    }).join('');
+}
+
+function saveBatchDriverForm() {
+    if (!activeBatchDriverId) return;
+    batchDriversData[activeBatchDriverId] = {
+        dateFrom:       document.getElementById('batchDateFrom').value,
+        dateTo:         document.getElementById('batchDateTo').value,
+        number:         document.getElementById('batchNumberStart').value,
+        vehicleModel:   document.getElementById('batchVehicleModel').value.trim(),
+        vehicleNumber:  document.getElementById('batchVehicleNumber').value.trim(),
+        departurePoint: document.getElementById('batchDeparturePoint').value.trim(),
+        destination:    document.getElementById('batchDestination').value.trim(),
+        departureTime:  document.getElementById('batchDepartureTime').value,
+        returnTime:     document.getElementById('batchReturnTime').value,
+        route:          document.getElementById('batchRoute').value.trim()
+    };
+}
+
+function loadBatchDriverForm(driverId) {
+    const data = batchDriversData[driverId];
+    if (!data) return;
+    document.getElementById('batchDateFrom').value    = data.dateFrom;
+    document.getElementById('batchDateTo').value      = data.dateTo;
+    document.getElementById('batchNumberStart').value = data.number;
+    document.getElementById('batchVehicleModel').value   = data.vehicleModel;
+    document.getElementById('batchVehicleNumber').value  = data.vehicleNumber;
+    document.getElementById('batchDeparturePoint').value = data.departurePoint;
+    document.getElementById('batchDestination').value    = data.destination;
+    document.getElementById('batchDepartureTime').value  = data.departureTime;
+    document.getElementById('batchReturnTime').value     = data.returnTime;
+    document.getElementById('batchRoute').value          = data.route;
+    elements.batchVehicleSelect.value = '';
+}
+
+function switchBatchDriver(driverId) {
+    if (driverId === activeBatchDriverId) return;
+    saveBatchDriverForm();
+    activeBatchDriverId = driverId;
+    elements.batchDriverTabs.querySelectorAll('.batch-driver-tab').forEach(btn => {
+        btn.classList.toggle('active', Number(btn.dataset.id) === driverId);
+    });
+    loadBatchDriverForm(driverId);
+}
+
+function closeBatchModal() {
+    elements.batchModal.style.display = 'none';
+    batchDriversData = {};
+    activeBatchDriverId = null;
+}
+
+async function generateBatchWaybills(e) {
+    e.preventDefault();
+
+    saveBatchDriverForm(); // сохраняем текущую вкладку
+
+    const templateName = elements.batchTemplateSelect.value;
+    if (!templateName) { alert('Выберите шаблон'); return; }
+
+    const selectedDrivers = drivers.filter(d => selectedDriverIds.has(d.id));
+    if (selectedDrivers.length === 0) return;
+
+    // Сохраняем снимок данных ДО закрытия модала (closeBatchModal сбрасывает batchDriversData)
+    const driversSnapshot = { ...batchDriversData };
+    closeBatchModal();
+
+    let successCount = 0;
+    const errors = [];
+
+    for (let i = 0; i < selectedDrivers.length; i++) {
+        const driver = selectedDrivers[i];
+        const data = driversSnapshot[driver.id] || {};
+        const waybillData = {
+            date:           formatDateRange(data.dateFrom, data.dateTo),
+            number:         data.number || '',
+            vehicleModel:   data.vehicleModel || '',
+            vehicleNumber:  data.vehicleNumber || '',
+            departurePoint: data.departurePoint || '',
+            destination:    data.destination || '',
+            departureTime:  data.departureTime || '',
+            returnTime:     data.returnTime || '',
+            route:          data.route || ''
+        };
+        try {
+            const result = await api.generateWaybill(templateName, driver, waybillData);
+            if (result.success) successCount++;
+            else errors.push(`${driver.lastName} ${driver.firstName}: ${result.error}`);
+        } catch (err) {
+            errors.push(`${driver.lastName} ${driver.firstName}: ${err.message}`);
+        }
+    }
+
+    // Сбрасываем выборку
+    selectedDriverIds.clear();
+    renderDriversList();
+
+    let msg = `Готово!\nСоздано путёвок: ${successCount} из ${selectedDrivers.length}`;
+    if (errors.length > 0) msg += `\n\nОшибки:\n` + errors.join('\n');
+    alert(msg);
+
+    if (successCount > 0) await api.openGeneratedFolder();
 }
 
 // Отрисовать список шаблонов
@@ -471,9 +883,10 @@ function openWaybillModal() {
     elements.waybillDateFrom.value = today;
     elements.waybillDateTo.value = today;
 
-    // Предлагаем следующий номер из счётчика (можно вручную изменить)
-    const nextNum = parseInt(localStorage.getItem('waybill_counter') || '0') + 1;
-    elements.waybillNumber.value = String(nextNum).padStart(3, '0');
+    elements.waybillNumber.value = '';
+
+    // Заполняем список техники
+    populateVehicleSelects();
 
     // Показываем модальное окно
     elements.waybillModal.style.display = 'flex';
@@ -536,17 +949,9 @@ async function generateWaybill(e) {
     closeWaybillModal();
 
     try {
-        console.log('Генерация путевого листа для:', currentDriver.lastName, currentDriver.firstName);
-
         const result = await api.generateWaybill(templateName, currentDriver, waybillData);
 
         if (result.success) {
-            // Фиксируем счётчик номеров (сохраняем числовую часть введённого номера)
-            const usedNum = parseInt(waybillData.number);
-            if (!isNaN(usedNum)) {
-                const stored = parseInt(localStorage.getItem('waybill_counter') || '0');
-                if (usedNum >= stored) localStorage.setItem('waybill_counter', usedNum);
-            }
             if (result.usedMapping) {
                 alert(`Путевой лист создан!\nЗаполнено полей: ${result.fieldsFilled}\nФайл: ${result.fileName}`);
             } else if (result.fieldsFound === 0) {
@@ -645,6 +1050,75 @@ function setupEventListeners() {
     });
 
     elements.canvasWrapper.addEventListener('click', handleCanvasClick);
+
+    // Пакетная генерация
+    document.getElementById('batchGenerateBtn').addEventListener('click', openBatchModal);
+    elements.batchDriverTabs.addEventListener('click', (e) => {
+        const tab = e.target.closest('.batch-driver-tab');
+        if (tab) switchBatchDriver(Number(tab.dataset.id));
+    });
+    document.getElementById('batchClearBtn').addEventListener('click', () => {
+        selectedDriverIds.clear();
+        renderDriversList();
+    });
+    document.getElementById('closeBatchModalBtn').addEventListener('click', closeBatchModal);
+    document.getElementById('cancelBatchModalBtn').addEventListener('click', closeBatchModal);
+    elements.batchModal.addEventListener('click', (e) => {
+        if (e.target === elements.batchModal) closeBatchModal();
+    });
+    elements.batchWaybillForm.addEventListener('submit', generateBatchWaybills);
+
+    // Список техники
+    elements.vehiclesBtn.addEventListener('click', openVehiclesModal);
+    document.getElementById('closeVehiclesModalBtn').addEventListener('click', closeVehiclesModal);
+    elements.vehiclesModal.addEventListener('click', (e) => {
+        if (e.target === elements.vehiclesModal) closeVehiclesModal();
+    });
+    document.getElementById('addVehicleBtn').addEventListener('click', addVehicle);
+    document.getElementById('newVehicleNumber').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); addVehicle(); }
+    });
+    elements.vehiclesList.addEventListener('click', (e) => {
+        const btn = e.target.closest('.btn-delete-vehicle');
+        if (btn) deleteVehicle(Number(btn.dataset.id));
+    });
+
+    // Выбор ТС из выпадающего списка заполняет поля марки/номера
+    elements.vehicleSelect.addEventListener('change', (e) => {
+        const v = vehicles.find(x => x.id === Number(e.target.value));
+        if (v) {
+            elements.vehicleModel.value = v.model;
+            elements.vehicleNumber.value = v.number;
+        }
+    });
+    elements.batchVehicleSelect.addEventListener('change', (e) => {
+        const v = vehicles.find(x => x.id === Number(e.target.value));
+        if (v) {
+            document.getElementById('batchVehicleModel').value = v.model;
+            document.getElementById('batchVehicleNumber').value = v.number;
+        }
+    });
+
+    // Кнопки генерации + печать
+    document.getElementById('generateAndPrintBtn').addEventListener('click', generateAndPrint);
+    document.getElementById('generateBatchAndPrintBtn').addEventListener('click', generateBatchAndPrint);
+
+    // Модал выбора принтера
+    document.getElementById('closePrinterModalBtn').addEventListener('click', closePrinterSelectModal);
+    document.getElementById('cancelPrintBtn').addEventListener('click', closePrinterSelectModal);
+    document.getElementById('printerModal').addEventListener('click', (e) => {
+        if (e.target === document.getElementById('printerModal')) closePrinterSelectModal();
+    });
+    document.getElementById('printersList').addEventListener('click', (e) => {
+        const item = e.target.closest('.printer-item');
+        if (item) selectPrinter(item.dataset.name);
+    });
+    document.getElementById('confirmPrintBtn').addEventListener('click', () => {
+        if (!selectedPrinterName) return;
+        const cb = printerModalCallback;
+        closePrinterSelectModal();
+        if (cb) cb(selectedPrinterName);
+    });
 }
 
 // ===== РЕДАКТОР МАППИНГА ПОЛЕЙ =====

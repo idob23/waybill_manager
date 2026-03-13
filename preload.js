@@ -18,7 +18,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateWaybill: (templateName, driver, waybillData) => ipcRenderer.invoke('generate-waybill', templateName, driver, waybillData),
   openGeneratedFolder: () => ipcRenderer.invoke('open-generated-folder'),
 
+  // Работа с техникой
+  getVehicles: () => ipcRenderer.invoke('get-vehicles'),
+  saveVehicles: (vehicles) => ipcRenderer.invoke('save-vehicles', vehicles),
+
   // Координатный маппинг полей
   getFieldMapping: (templateName) => ipcRenderer.invoke('get-field-mapping', templateName),
-  saveFieldMapping: (templateName, mapping) => ipcRenderer.invoke('save-field-mapping', templateName, mapping)
+  saveFieldMapping: (templateName, mapping) => ipcRenderer.invoke('save-field-mapping', templateName, mapping),
+
+  // Печать
+  getPrinters: () => ipcRenderer.invoke('get-printers'),
+  printFile: (filePath, printerName) => ipcRenderer.invoke('print-file', filePath, printerName)
 });

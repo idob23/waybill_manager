@@ -41,6 +41,11 @@ function createDataFolders() {
   if (!fs.existsSync(driversFile)) {
     fs.writeFileSync(driversFile, JSON.stringify([], null, 2));
   }
+  // Создаем файл vehicles.json если его нет
+  const vehiclesFile = path.join(dataPath, 'vehicles.json');
+  if (!fs.existsSync(vehiclesFile)) {
+    fs.writeFileSync(vehiclesFile, JSON.stringify([], null, 2));
+  }
 }
 
 // Создание главного окна
@@ -103,6 +108,28 @@ ipcMain.handle('save-drivers', async (event, drivers) => {
     return { success: true };
   } catch (error) {
     console.error('Ошибка сохранения:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Получить список техники
+ipcMain.handle('get-vehicles', async () => {
+  try {
+    const vehiclesFile = path.join(dataPath, 'vehicles.json');
+    const data = fs.readFileSync(vehiclesFile, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    return [];
+  }
+});
+
+// Сохранить список техники
+ipcMain.handle('save-vehicles', async (_event, vehicles) => {
+  try {
+    const vehiclesFile = path.join(dataPath, 'vehicles.json');
+    fs.writeFileSync(vehiclesFile, JSON.stringify(vehicles, null, 2));
+    return { success: true };
+  } catch (error) {
     return { success: false, error: error.message };
   }
 });
@@ -413,4 +440,50 @@ ipcMain.handle('save-field-mapping', async (_event, templateName, mapping) => {
   } catch (error) {
     return { success: false, error: error.message };
   }
+});
+
+// Получить список принтеров
+ipcMain.handle('get-printers', async () => {
+  try {
+    const printers = await mainWindow.webContents.getPrintersAsync();
+    return printers.map(p => ({
+      name: p.name,
+      displayName: p.displayName || p.name,
+      isDefault: p.isDefault
+    }));
+  } catch (error) {
+    return [];
+  }
+});
+
+// Напечатать PDF-файл на выбранном принтере
+ipcMain.handle('print-file', async (_event, filePath, printerName) => {
+  return new Promise((resolve) => {
+    const { pathToFileURL } = require('url');
+    const printWindow = new BrowserWindow({
+      show: false,
+      webPreferences: { nodeIntegration: false, contextIsolation: true }
+    });
+
+    const fileUrl = pathToFileURL(filePath).href;
+    printWindow.loadURL(fileUrl);
+
+    printWindow.webContents.once('did-finish-load', () => {
+      // Даём PDF-вьюеру Chromium время отрендерить документ
+      setTimeout(() => {
+        printWindow.webContents.print(
+          { silent: true, deviceName: printerName, printBackground: true },
+          (success, failureReason) => {
+            printWindow.close();
+            resolve({ success, failureReason: failureReason || null });
+          }
+        );
+      }, 1500);
+    });
+
+    printWindow.webContents.once('did-fail-load', (_ev, _code, desc) => {
+      printWindow.close();
+      resolve({ success: false, failureReason: desc });
+    });
+  });
 });
