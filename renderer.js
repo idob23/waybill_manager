@@ -890,9 +890,6 @@ function openWaybillModal() {
 
     // Показываем модальное окно
     elements.waybillModal.style.display = 'flex';
-
-    // Явно переводим фокус на поле номера (иначе Electron может оставить фокус в DevTools)
-    setTimeout(() => elements.waybillNumber.focus(), 50);
 }
 
 // Форматировать диапазон дат (или одну дату если совпадают)

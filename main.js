@@ -459,31 +459,21 @@ ipcMain.handle('get-printers', async () => {
 // Напечатать PDF-файл на выбранном принтере
 ipcMain.handle('print-file', async (_event, filePath, printerName) => {
   return new Promise((resolve) => {
-    const { pathToFileURL } = require('url');
-    const printWindow = new BrowserWindow({
-      show: false,
-      webPreferences: { nodeIntegration: false, contextIsolation: true }
-    });
+    const { exec } = require('child_process');
 
-    const fileUrl = pathToFileURL(filePath).href;
-    printWindow.loadURL(fileUrl);
+    // Используем PowerShell для печати PDF через системный обработчик,
+    // минуя встроенный PDF-вьюер Chromium (который печатает тёмный фон)
+    const escapedPath = filePath.replace(/'/g, "''");
+    const escapedPrinter = printerName.replace(/'/g, "''");
 
-    printWindow.webContents.once('did-finish-load', () => {
-      // Даём PDF-вьюеру Chromium время отрендерить документ
-      setTimeout(() => {
-        printWindow.webContents.print(
-          { silent: true, deviceName: printerName, printBackground: true },
-          (success, failureReason) => {
-            printWindow.close();
-            resolve({ success, failureReason: failureReason || null });
-          }
-        );
-      }, 1500);
-    });
+    const cmd = `powershell -Command "Start-Process -FilePath '${escapedPath}' -Verb PrintTo -ArgumentList '${escapedPrinter}' -WindowStyle Hidden"`;
 
-    printWindow.webContents.once('did-fail-load', (_ev, _code, desc) => {
-      printWindow.close();
-      resolve({ success: false, failureReason: desc });
+    exec(cmd, { timeout: 30000 }, (error) => {
+      if (error) {
+        resolve({ success: false, failureReason: error.message });
+      } else {
+        resolve({ success: true, failureReason: null });
+      }
     });
   });
 });
