@@ -458,17 +458,26 @@ ipcMain.handle('get-printers', async () => {
 
 // Напечатать PDF-файл на выбранном принтере
 ipcMain.handle('print-file', async (_event, filePath, printerName) => {
+  if (!filePath || !printerName) {
+    return { success: false, failureReason: 'Не указан файл или принтер' };
+  }
   return new Promise((resolve) => {
-    const { exec } = require('child_process');
+    const { execFile } = require('child_process');
+    const os = require('os');
 
-    // Используем PowerShell для печати PDF через системный обработчик,
-    // минуя встроенный PDF-вьюер Chromium (который печатает тёмный фон)
-    const escapedPath = filePath.replace(/'/g, "''");
-    const escapedPrinter = printerName.replace(/'/g, "''");
+    // Записываем PS-скрипт в temp-файл в UTF-8 с BOM (PowerShell корректно читает)
+    const scriptPath = path.join(os.tmpdir(), `print_${Date.now()}.ps1`);
+    const psScript = `Start-Process -FilePath '${filePath.replace(/'/g, "''")}' -Verb PrintTo -ArgumentList '${printerName.replace(/'/g, "''")}' -WindowStyle Hidden`;
+    fs.writeFileSync(scriptPath, '\uFEFF' + psScript, 'utf8');
 
-    const cmd = `powershell -Command "Start-Process -FilePath '${escapedPath}' -Verb PrintTo -ArgumentList '${escapedPrinter}' -WindowStyle Hidden"`;
+    execFile('powershell.exe', [
+      '-NoProfile',
+      '-ExecutionPolicy', 'Bypass',
+      '-File', scriptPath
+    ], { timeout: 30000 }, (error) => {
+      // Удаляем временный скрипт
+      try { fs.unlinkSync(scriptPath); } catch (_) {}
 
-    exec(cmd, { timeout: 30000 }, (error) => {
       if (error) {
         resolve({ success: false, failureReason: error.message });
       } else {

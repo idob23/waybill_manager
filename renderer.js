@@ -1113,8 +1113,9 @@ function setupEventListeners() {
     document.getElementById('confirmPrintBtn').addEventListener('click', () => {
         if (!selectedPrinterName) return;
         const cb = printerModalCallback;
+        const printer = selectedPrinterName;
         closePrinterSelectModal();
-        if (cb) cb(selectedPrinterName);
+        if (cb) cb(printer);
     });
 }
 
