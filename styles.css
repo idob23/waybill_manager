@@ -613,9 +613,54 @@ body {
     border-radius: 5px;
     padding: 8px 10px;
     display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+}
+
+.field-item-top {
+    display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 13px;
+}
+
+.field-item-bottom {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #7f8c8d;
+}
+
+.field-item-bottom label {
+    font-weight: 600;
+    margin: 0;
+    font-size: 11px;
+}
+
+.field-width-range {
+    flex: 1;
+    height: 4px;
+    cursor: pointer;
+    accent-color: #1abc9c;
+}
+
+.field-width-value {
+    min-width: 28px;
+    text-align: right;
+    font-weight: 600;
+    font-size: 11px;
+    color: #2c3e50;
+}
+
+.field-width-guide {
+    position: absolute;
+    border: 2px dashed rgba(231, 76, 60, 0.6);
+    background: rgba(231, 76, 60, 0.05);
+    pointer-events: none;
+    z-index: 7;
+    transform: translateY(-100%);
+    border-radius: 2px;
 }
 
 .placed-field-item .field-label {

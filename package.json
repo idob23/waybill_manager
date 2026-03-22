@@ -38,6 +38,9 @@
       "!generated/**",
       "!dist/**"
     ],
+    "extraResources": [
+      { "from": "SumatraPDF.exe", "to": "../SumatraPDF.exe" }
+    ],
     "asarUnpack": [
       "node_modules/pdfjs-dist/build/pdf.worker.js"
     ],

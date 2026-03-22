@@ -1231,7 +1231,7 @@ function updatePageNav() {
 
 // Отрисовать маркеры полей на канвасе
 async function renderFieldMarkers() {
-    elements.canvasWrapper.querySelectorAll('.field-marker, .field-preview-text').forEach(m => m.remove());
+    elements.canvasWrapper.querySelectorAll('.field-marker, .field-preview-text, .field-width-guide').forEach(m => m.remove());
     if (!pdfJsDoc) return;
 
     const currentPageFields = editorMapping.fields.filter(f => (f.page + 1) === pdfCurrentPage);
@@ -1264,7 +1264,24 @@ async function renderFieldMarkers() {
         preview.style.left = previewX + 'px';
         preview.style.top = previewY + 'px';
         preview.style.fontSize = canvasFontSize + 'px';
+        // Показываем ширину поля визуально
+        if (field.maxWidth) {
+            preview.style.maxWidth = (field.maxWidth * 1.5) + 'px';
+            preview.style.overflow = 'hidden';
+            preview.style.textOverflow = 'ellipsis';
+        }
         elements.canvasWrapper.appendChild(preview);
+
+        // Визуальная рамка ширины поля
+        if (field.maxWidth) {
+            const widthGuide = document.createElement('div');
+            widthGuide.className = 'field-width-guide';
+            widthGuide.style.left = previewX + 'px';
+            widthGuide.style.top = previewY + 'px';
+            widthGuide.style.width = (field.maxWidth * 1.5) + 'px';
+            widthGuide.style.height = (canvasFontSize * 1.3) + 'px';
+            elements.canvasWrapper.appendChild(widthGuide);
+        }
 
         // Метка с именем поля и кнопкой удаления (на исходной точке клика)
         const marker = document.createElement('div');
@@ -1352,14 +1369,27 @@ function renderPlacedFieldsList() {
         const item = document.createElement('div');
         item.className = 'placed-field-item';
         item.innerHTML = `
-            <span class="field-label">${FIELD_LABELS[field.dataKey] || field.dataKey}</span>
-            <span class="field-page">стр.${field.page + 1}</span>
-            <button class="field-delete" title="Удалить">×</button>
+            <div class="field-item-top">
+                <span class="field-label">${FIELD_LABELS[field.dataKey] || field.dataKey}</span>
+                <span class="field-page">стр.${field.page + 1}</span>
+                <button class="field-delete" title="Удалить">×</button>
+            </div>
+            <div class="field-item-bottom">
+                <label>Ш:</label>
+                <input type="range" class="field-width-range" min="30" max="600" value="${field.maxWidth || 150}">
+                <span class="field-width-value">${field.maxWidth || 150}</span>
+            </div>
         `;
         item.querySelector('.field-delete').addEventListener('click', () => {
             editorMapping.fields = editorMapping.fields.filter(f => f.id !== field.id);
             renderFieldMarkers();
             renderPlacedFieldsList();
+        });
+        item.querySelector('.field-width-range').addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            field.maxWidth = val;
+            item.querySelector('.field-width-value').textContent = val;
+            renderFieldMarkers();
         });
         list.appendChild(item);
     });
@@ -1394,7 +1424,8 @@ async function handleCanvasClick(e) {
         page: pdfCurrentPage - 1,
         pdfX,
         pdfY,
-        fontSize: parseInt(elements.editorFontSize.value) || 10
+        fontSize: parseInt(elements.editorFontSize.value) || 10,
+        maxWidth: 150
     };
 
     editorMapping.fields.push(field);

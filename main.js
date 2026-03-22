@@ -287,11 +287,40 @@ ipcMain.handle('generate-waybill', async (_event, templateName, driver, waybillD
 
           const text = dataValues[field.dataKey] || '';
           if (text) {
-            // Поворачиваем текст обратно, чтобы он был читаемым при любой ориентации страницы
-            page.drawText(text, {
-              x, y, size: fontSize, font: cyrFont,
-              rotate: degrees(pageRotation)
-            });
+            const maxWidth = field.maxWidth || 200;
+
+            // Разбиваем текст на строки по ширине поля
+            const words = text.split(' ');
+            const lines = [];
+            let currentLine = '';
+
+            for (const word of words) {
+              const testLine = currentLine ? currentLine + ' ' + word : word;
+              const testWidth = cyrFont.widthOfTextAtSize(testLine, fontSize);
+              if (testWidth > maxWidth && currentLine) {
+                lines.push(currentLine);
+                currentLine = word;
+              } else {
+                currentLine = testLine;
+              }
+            }
+            if (currentLine) lines.push(currentLine);
+
+            // Рисуем каждую строку со сдвигом вниз
+            const lineHeight = fontSize * 1.2;
+            for (let i = 0; i < lines.length; i++) {
+              let lineX = x;
+              let lineY = y;
+              if (pageRotation === 90)       { lineX -= lineHeight * i; }
+              else if (pageRotation === 270) { lineX += lineHeight * i; }
+              else if (pageRotation === 180) { lineY += lineHeight * i; }
+              else                           { lineY -= lineHeight * i; }
+
+              page.drawText(lines[i], {
+                x: lineX, y: lineY, size: fontSize, font: cyrFont,
+                rotate: degrees(pageRotation)
+              });
+            }
             filled++;
           }
         }
@@ -461,23 +490,26 @@ ipcMain.handle('print-file', async (_event, filePath, printerName) => {
   if (!filePath || !printerName) {
     return { success: false, failureReason: 'Не указан файл или принтер' };
   }
+
+  const { execFile } = require('child_process');
+
+  let sumatraPath = path.join(appRootDir, 'SumatraPDF.exe');
+  if (!fs.existsSync(sumatraPath)) {
+    sumatraPath = path.join(__dirname, 'SumatraPDF.exe');
+  }
+
+  if (!fs.existsSync(sumatraPath)) {
+    return { success: false, failureReason: `SumatraPDF.exe не найден.\nИскали в:\n1) ${path.join(appRootDir, 'SumatraPDF.exe')}\n2) ${path.join(__dirname, 'SumatraPDF.exe')}` };
+  }
+
   return new Promise((resolve) => {
-    const { execFile } = require('child_process');
-    const os = require('os');
 
-    // Записываем PS-скрипт в temp-файл в UTF-8 с BOM (PowerShell корректно читает)
-    const scriptPath = path.join(os.tmpdir(), `print_${Date.now()}.ps1`);
-    const psScript = `Start-Process -FilePath '${filePath.replace(/'/g, "''")}' -Verb PrintTo -ArgumentList '${printerName.replace(/'/g, "''")}' -WindowStyle Hidden`;
-    fs.writeFileSync(scriptPath, '\uFEFF' + psScript, 'utf8');
-
-    execFile('powershell.exe', [
-      '-NoProfile',
-      '-ExecutionPolicy', 'Bypass',
-      '-File', scriptPath
+    // -print-to "имя принтера" — тихая печать на указанный принтер
+    execFile(sumatraPath, [
+      '-print-to', printerName,
+      '-silent',
+      filePath
     ], { timeout: 30000 }, (error) => {
-      // Удаляем временный скрипт
-      try { fs.unlinkSync(scriptPath); } catch (_) {}
-
       if (error) {
         resolve({ success: false, failureReason: error.message });
       } else {
