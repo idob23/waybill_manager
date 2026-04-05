@@ -315,7 +315,7 @@ function closeMaintenanceModal() {
 
 function autoResizeTextarea(el) {
     el.style.height = 'auto';
-    el.style.height = el.scrollHeight + 'px';
+    el.style.height = Math.max(el.scrollHeight, 32) + 'px';
 }
 
 function formatFIO(person) {
@@ -329,7 +329,6 @@ async function showWorkersDropdown(textarea) {
     if (mechanics.length === 0) {
         try { mechanics = await api.getMechanics(); } catch (err) { mechanics = []; }
     }
-    const td = textarea.closest('td');
     let html = '<div class="worker-group-title">Водители</div>';
     if (drivers.length > 0) {
         drivers.forEach(d => { html += `<div class="worker-option">${formatFIO(d)}</div>`; });
@@ -345,7 +344,14 @@ async function showWorkersDropdown(textarea) {
     const dropdown = document.createElement('div');
     dropdown.className = 'workers-dropdown';
     dropdown.innerHTML = html;
-    td.appendChild(dropdown);
+
+    const rect = textarea.getBoundingClientRect();
+    dropdown.style.left = rect.left + 'px';
+    dropdown.style.top = rect.bottom + 'px';
+    dropdown.style.width = Math.max(rect.width, 220) + 'px';
+    document.body.appendChild(dropdown);
+
+    const removeDropdown = () => dropdown.remove();
 
     dropdown.addEventListener('click', (e) => {
         const opt = e.target.closest('.worker-option');
@@ -354,12 +360,15 @@ async function showWorkersDropdown(textarea) {
         const current = textarea.value.trim();
         textarea.value = current ? current + ', ' + fio : fio;
         autoResizeTextarea(textarea);
-        dropdown.remove();
+        removeDropdown();
     });
+
+    const wrapper = document.querySelector('.maintenance-table-wrapper');
+    if (wrapper) wrapper.addEventListener('scroll', removeDropdown, { once: true });
 
     setTimeout(() => {
         document.addEventListener('click', (e) => {
-            if (!dropdown.contains(e.target) && e.target !== textarea) dropdown.remove();
+            if (!dropdown.contains(e.target) && e.target !== textarea) removeDropdown();
         }, { once: true });
     }, 0);
 }
@@ -382,7 +391,9 @@ function renderMaintenanceTable() {
             <td><button class="btn-delete-maintenance" data-index="${i}" title="Удалить">🗑</button></td>
         </tr>
     `).join('');
-    elements.maintenanceTableBody.querySelectorAll('textarea.m-input').forEach(autoResizeTextarea);
+    elements.maintenanceTableBody.querySelectorAll('textarea.m-input').forEach(ta => {
+        if (ta.value.length > 0) autoResizeTextarea(ta);
+    });
 }
 
 function collectMaintenanceFromDOM() {
