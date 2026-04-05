@@ -313,24 +313,56 @@ function closeMaintenanceModal() {
     lastFocusedWorkersTextarea = null;
 }
 
+function autoResizeTextarea(el) {
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+}
+
+function formatFIO(person) {
+    const last = person.lastName || '';
+    const first = person.firstName ? person.firstName[0] + '.' : '';
+    const middle = person.middleName ? person.middleName[0] + '.' : '';
+    return `${last} ${first}${middle}`.trim();
+}
+
+function buildWorkerSelectOptions() {
+    let opts = '<option value="">— Выбрать —</option>';
+    if (drivers.length > 0) {
+        opts += '<optgroup label="Водители">';
+        drivers.forEach(d => { const fio = formatFIO(d); opts += `<option value="${fio}">${fio}</option>`; });
+        opts += '</optgroup>';
+    }
+    if (mechanics.length > 0) {
+        opts += '<optgroup label="Слесари">';
+        mechanics.forEach(m => { const fio = formatFIO(m); opts += `<option value="${fio}">${fio}</option>`; });
+        opts += '</optgroup>';
+    }
+    return opts;
+}
+
 function renderMaintenanceTable() {
     if (maintenanceRecords.length === 0) {
         elements.maintenanceTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#95a5a6;padding:20px;">Нет записей. Нажмите "Добавить запись".</td></tr>';
         return;
     }
+    const workerOpts = buildWorkerSelectOptions();
     elements.maintenanceTableBody.innerHTML = maintenanceRecords.map((r, i) => `
         <tr class="maintenance-row${r.completed ? ' maintenance-completed' : ''}" data-index="${i}">
             <td><input type="date" class="m-input m-date" value="${r.date || ''}"></td>
             <td><input type="text" class="m-input m-odometer" value="${r.odometer || ''}" placeholder="км / м.ч."></td>
-            <td><textarea class="m-input m-work-type" rows="2">${r.workType || ''}</textarea></td>
-            <td><textarea class="m-input m-workers" rows="2">${r.workers || ''}</textarea></td>
-            <td><textarea class="m-input m-parts" rows="2">${r.parts || ''}</textarea></td>
-            <td><textarea class="m-input m-fluids" rows="2">${r.fluids || ''}</textarea></td>
+            <td><textarea class="m-input m-work-type" rows="1">${r.workType || ''}</textarea></td>
+            <td>
+                <select class="m-worker-select">${workerOpts}</select>
+                <textarea class="m-input m-workers" rows="1">${r.workers || ''}</textarea>
+            </td>
+            <td><textarea class="m-input m-parts" rows="1">${r.parts || ''}</textarea></td>
+            <td><textarea class="m-input m-fluids" rows="1">${r.fluids || ''}</textarea></td>
             <td style="text-align:center"><input type="checkbox" class="m-completed" ${r.completed ? 'checked' : ''}></td>
-            <td><textarea class="m-input m-note" rows="2">${r.note || ''}</textarea></td>
+            <td><textarea class="m-input m-note" rows="1">${r.note || ''}</textarea></td>
             <td><button class="btn-delete-maintenance" data-index="${i}" title="Удалить">🗑</button></td>
         </tr>
     `).join('');
+    elements.maintenanceTableBody.querySelectorAll('textarea.m-input').forEach(autoResizeTextarea);
 }
 
 function collectMaintenanceFromDOM() {
@@ -1400,10 +1432,24 @@ function setupEventListeners() {
         if (delBtn) deleteMaintenanceRow(Number(delBtn.dataset.index));
     });
 
+    elements.maintenanceTableBody.addEventListener('input', (e) => {
+        if (e.target.matches('textarea.m-input')) autoResizeTextarea(e.target);
+    });
+
     elements.maintenanceTableBody.addEventListener('change', (e) => {
         if (e.target.classList.contains('m-completed')) {
             const row = e.target.closest('.maintenance-row');
             if (row) row.classList.toggle('maintenance-completed', e.target.checked);
+        }
+        if (e.target.classList.contains('m-worker-select')) {
+            const val = e.target.value;
+            if (!val) return;
+            const td = e.target.closest('td');
+            const ta = td.querySelector('.m-workers');
+            const current = ta.value.trim();
+            ta.value = current ? current + ', ' + val : val;
+            e.target.value = '';
+            autoResizeTextarea(ta);
         }
     });
 
