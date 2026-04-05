@@ -16,6 +16,13 @@ let activeBatchDriverId = null; // Текущая активная вкладк�
 let printerModalCallback = null; // Callback после выбора принтера
 let selectedPrinterName = null; // Выбранный принтер
 
+// Сегодняшняя дата по UTC+10 (Якутия)
+function getTodayDate() {
+    const now = new Date();
+    const utc10 = new Date(now.getTime() + 10 * 60 * 60 * 1000);
+    return utc10.toISOString().split('T')[0];
+}
+
 // ===== TOAST И CONFIRM (неблокирующие замены alert/confirm) =====
 
 function showToast(message, type = 'success', duration = 3000) {
@@ -557,7 +564,7 @@ function openBatchModal() {
     if (selectedDriverIds.size === 0) return;
 
     const selectedDrivers = drivers.filter(d => selectedDriverIds.has(d.id));
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayDate();
 
     // Инициализируем индивидуальные данные для каждого водителя
     batchDriversData = {};
@@ -947,7 +954,7 @@ function openWaybillModal() {
     }
 
     // Устанавливаем сегодняшнюю дату по умолчанию
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayDate();
     elements.waybillDateFrom.value = today;
     elements.waybillDateTo.value = today;
 
