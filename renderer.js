@@ -325,19 +325,43 @@ function formatFIO(person) {
     return `${last} ${first}${middle}`.trim();
 }
 
-function buildWorkerSelectOptions() {
-    let opts = '<option value="">— Выбрать —</option>';
+async function showWorkersDropdown(textarea) {
+    if (mechanics.length === 0) {
+        try { mechanics = await api.getMechanics(); } catch (err) { mechanics = []; }
+    }
+    const td = textarea.closest('td');
+    let html = '<div class="worker-group-title">Водители</div>';
     if (drivers.length > 0) {
-        opts += '<optgroup label="Водители">';
-        drivers.forEach(d => { const fio = formatFIO(d); opts += `<option value="${fio}">${fio}</option>`; });
-        opts += '</optgroup>';
+        drivers.forEach(d => { html += `<div class="worker-option">${formatFIO(d)}</div>`; });
+    } else {
+        html += '<div style="padding:6px 10px;color:#95a5a6;font-size:12px;">Нет водителей</div>';
     }
+    html += '<div class="worker-group-title">Слесари</div>';
     if (mechanics.length > 0) {
-        opts += '<optgroup label="Слесари">';
-        mechanics.forEach(m => { const fio = formatFIO(m); opts += `<option value="${fio}">${fio}</option>`; });
-        opts += '</optgroup>';
+        mechanics.forEach(m => { html += `<div class="worker-option">${formatFIO(m)}</div>`; });
+    } else {
+        html += '<div style="padding:6px 10px;color:#95a5a6;font-size:12px;">Нет слесарей. Добавьте через «Все водители и слесари»</div>';
     }
-    return opts;
+    const dropdown = document.createElement('div');
+    dropdown.className = 'workers-dropdown';
+    dropdown.innerHTML = html;
+    td.appendChild(dropdown);
+
+    dropdown.addEventListener('click', (e) => {
+        const opt = e.target.closest('.worker-option');
+        if (!opt) return;
+        const fio = opt.textContent;
+        const current = textarea.value.trim();
+        textarea.value = current ? current + ', ' + fio : fio;
+        autoResizeTextarea(textarea);
+        dropdown.remove();
+    });
+
+    setTimeout(() => {
+        document.addEventListener('click', (e) => {
+            if (!dropdown.contains(e.target) && e.target !== textarea) dropdown.remove();
+        }, { once: true });
+    }, 0);
 }
 
 function renderMaintenanceTable() {
@@ -345,16 +369,12 @@ function renderMaintenanceTable() {
         elements.maintenanceTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#95a5a6;padding:20px;">Нет записей. Нажмите "Добавить запись".</td></tr>';
         return;
     }
-    const workerOpts = buildWorkerSelectOptions();
     elements.maintenanceTableBody.innerHTML = maintenanceRecords.map((r, i) => `
         <tr class="maintenance-row${r.completed ? ' maintenance-completed' : ''}" data-index="${i}">
             <td><input type="date" class="m-input m-date" value="${r.date || ''}"></td>
             <td><input type="text" class="m-input m-odometer" value="${r.odometer || ''}" placeholder="км / м.ч."></td>
             <td><textarea class="m-input m-work-type" rows="1">${r.workType || ''}</textarea></td>
-            <td>
-                <select class="m-worker-select">${workerOpts}</select>
-                <textarea class="m-input m-workers" rows="1">${r.workers || ''}</textarea>
-            </td>
+            <td class="m-workers-cell"><textarea class="m-input m-workers" rows="1" placeholder="Нажмите для выбора...">${r.workers || ''}</textarea></td>
             <td><textarea class="m-input m-parts" rows="1">${r.parts || ''}</textarea></td>
             <td><textarea class="m-input m-fluids" rows="1">${r.fluids || ''}</textarea></td>
             <td style="text-align:center"><input type="checkbox" class="m-completed" ${r.completed ? 'checked' : ''}></td>
@@ -1429,7 +1449,11 @@ function setupEventListeners() {
 
     elements.maintenanceTableBody.addEventListener('click', (e) => {
         const delBtn = e.target.closest('.btn-delete-maintenance');
-        if (delBtn) deleteMaintenanceRow(Number(delBtn.dataset.index));
+        if (delBtn) { deleteMaintenanceRow(Number(delBtn.dataset.index)); return; }
+        if (e.target.classList.contains('m-workers')) {
+            document.querySelectorAll('.workers-dropdown').forEach(d => d.remove());
+            showWorkersDropdown(e.target);
+        }
     });
 
     elements.maintenanceTableBody.addEventListener('input', (e) => {
@@ -1440,16 +1464,6 @@ function setupEventListeners() {
         if (e.target.classList.contains('m-completed')) {
             const row = e.target.closest('.maintenance-row');
             if (row) row.classList.toggle('maintenance-completed', e.target.checked);
-        }
-        if (e.target.classList.contains('m-worker-select')) {
-            const val = e.target.value;
-            if (!val) return;
-            const td = e.target.closest('td');
-            const ta = td.querySelector('.m-workers');
-            const current = ta.value.trim();
-            ta.value = current ? current + ', ' + val : val;
-            e.target.value = '';
-            autoResizeTextarea(ta);
         }
     });
 

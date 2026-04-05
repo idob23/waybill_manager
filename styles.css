@@ -1269,13 +1269,49 @@ textarea.m-input {
     overflow: hidden;
 }
 
-.m-worker-select {
+.m-workers-cell {
+    position: relative;
+}
+
+.workers-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
     width: 100%;
-    margin-bottom: 4px;
-    font-size: 12px;
-    padding: 4px;
-    border-radius: 4px;
+    min-width: 200px;
+    max-height: 200px;
+    overflow-y: auto;
+    background: white;
     border: 1px solid #ddd;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+}
+
+.worker-group-title {
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #7f8c8d;
+    background: #f8f9fa;
+    border-bottom: 1px solid #eee;
+    text-transform: uppercase;
+}
+
+.worker-option {
+    padding: 8px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.worker-option:hover {
+    background: #e8f8f5;
+    color: #1abc9c;
+}
+
+.worker-option:last-child {
+    border-bottom: none;
 }
 
 .m-completed {
