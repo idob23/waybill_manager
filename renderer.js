@@ -150,21 +150,28 @@ function populateVehicleSelects() {
 }
 
 function openVehiclesModal() {
+    document.getElementById('vehicleSearchInput').value = '';
     renderVehiclesList();
     elements.vehiclesModal.style.display = 'flex';
-    setTimeout(() => document.getElementById('newVehicleModel').focus(), 50);
+    setTimeout(() => document.getElementById('vehicleSearchInput').focus(), 50);
 }
 
 function closeVehiclesModal() {
     elements.vehiclesModal.style.display = 'none';
 }
 
-function renderVehiclesList() {
+function renderVehiclesList(filter = '') {
     if (vehicles.length === 0) {
         elements.vehiclesList.innerHTML = '<p class="vehicles-empty">Список техники пуст. Добавьте транспортное средство.</p>';
         return;
     }
-    elements.vehiclesList.innerHTML = vehicles.map(v => `
+    const f = filter.toLowerCase();
+    const filtered = f ? vehicles.filter(v => v.model.toLowerCase().includes(f) || v.number.toLowerCase().includes(f)) : vehicles;
+    if (filtered.length === 0) {
+        elements.vehiclesList.innerHTML = '<p class="vehicles-empty">Ничего не найдено</p>';
+        return;
+    }
+    elements.vehiclesList.innerHTML = filtered.map(v => `
         <div class="vehicle-item">
             <div class="vehicle-info">
                 <span class="vehicle-model">${v.model}</span>
@@ -1066,6 +1073,9 @@ function setupEventListeners() {
     elements.batchWaybillForm.addEventListener('submit', generateBatchWaybills);
 
     // Список техники
+    document.getElementById('vehicleSearchInput').addEventListener('input', (e) => {
+        renderVehiclesList(e.target.value);
+    });
     elements.vehiclesBtn.addEventListener('click', openVehiclesModal);
     document.getElementById('closeVehiclesModalBtn').addEventListener('click', closeVehiclesModal);
     elements.vehiclesModal.addEventListener('click', (e) => {

@@ -920,6 +920,14 @@ body {
     flex-shrink: 0;
 }
 
+.vehicles-search {
+    margin-bottom: 12px;
+}
+
+.vehicles-search input {
+    width: 100%;
+}
+
 .vehicles-list {
     display: flex;
     flex-direction: column;
