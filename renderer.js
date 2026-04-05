@@ -177,7 +177,10 @@ function renderVehiclesList(filter = '') {
                 <span class="vehicle-model">${v.model}</span>
                 <span class="vehicle-number">${v.number}</span>
             </div>
-            <button class="btn-delete-vehicle" data-id="${v.id}" title="Удалить">🗑</button>
+            <div class="vehicle-actions">
+                <button class="btn-edit-vehicle" data-id="${v.id}" title="Редактировать">✏️</button>
+                <button class="btn-delete-vehicle" data-id="${v.id}" title="Удалить">🗑</button>
+            </div>
         </div>
     `).join('');
 }
@@ -195,6 +198,30 @@ async function addVehicle() {
     numberInput.value = '';
     renderVehiclesList();
     modelInput.focus();
+}
+
+function editVehicle(id) {
+    const vehicle = vehicles.find(v => v.id === id);
+    if (!vehicle) return;
+    const item = elements.vehiclesList.querySelector(`.btn-edit-vehicle[data-id="${id}"]`).closest('.vehicle-item');
+    item.className = 'vehicle-edit-form';
+    item.innerHTML = `
+        <input type="text" class="form-control" value="${vehicle.model}" data-field="model">
+        <input type="text" class="form-control" value="${vehicle.number}" data-field="number">
+        <button class="btn-save-vehicle" data-id="${id}" title="Сохранить">✅</button>
+        <button class="btn-cancel-vehicle" title="Отменить">❌</button>
+    `;
+    item.querySelector('[data-field="model"]').focus();
+}
+
+async function saveVehicleEdit(id, form) {
+    const vehicle = vehicles.find(v => v.id === id);
+    if (!vehicle) return;
+    vehicle.model = form.querySelector('[data-field="model"]').value.trim();
+    vehicle.number = form.querySelector('[data-field="number"]').value.trim();
+    await api.saveVehicles(vehicles);
+    populateVehicleSelects();
+    renderVehiclesList(document.getElementById('vehicleSearchInput').value);
 }
 
 async function deleteVehicle(id) {
@@ -1086,6 +1113,12 @@ function setupEventListeners() {
         if (e.key === 'Enter') { e.preventDefault(); addVehicle(); }
     });
     elements.vehiclesList.addEventListener('click', (e) => {
+        const editBtn = e.target.closest('.btn-edit-vehicle');
+        if (editBtn) { editVehicle(Number(editBtn.dataset.id)); return; }
+        const saveBtn = e.target.closest('.btn-save-vehicle');
+        if (saveBtn) { saveVehicleEdit(Number(saveBtn.dataset.id), saveBtn.closest('.vehicle-edit-form')); return; }
+        const cancelBtn = e.target.closest('.btn-cancel-vehicle');
+        if (cancelBtn) { renderVehiclesList(document.getElementById('vehicleSearchInput').value); return; }
         const btn = e.target.closest('.btn-delete-vehicle');
         if (btn) deleteVehicle(Number(btn.dataset.id));
     });
