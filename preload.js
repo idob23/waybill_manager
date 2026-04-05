@@ -22,6 +22,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getVehicles: () => ipcRenderer.invoke('get-vehicles'),
   saveVehicles: (vehicles) => ipcRenderer.invoke('save-vehicles', vehicles),
 
+  // Журнал обслуживания техники
+  getVehicleMaintenance: (vehicleId) => ipcRenderer.invoke('get-vehicle-maintenance', vehicleId),
+  saveVehicleMaintenance: (vehicleId, records) => ipcRenderer.invoke('save-vehicle-maintenance', vehicleId, records),
+
+  // Слесари
+  getMechanics: () => ipcRenderer.invoke('get-mechanics'),
+  saveMechanics: (mechanics) => ipcRenderer.invoke('save-mechanics', mechanics),
+
   // Координатный маппинг полей
   getFieldMapping: (templateName) => ipcRenderer.invoke('get-field-mapping', templateName),
   saveFieldMapping: (templateName, mapping) => ipcRenderer.invoke('save-field-mapping', templateName, mapping),

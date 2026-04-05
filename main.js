@@ -27,6 +27,7 @@ function createDataFolders() {
   const folders = [
     dataPath,
     path.join(dataPath, 'templates'),
+    path.join(dataPath, 'vehicle-maintenance'),
     generatedDir
   ];
   
@@ -45,6 +46,11 @@ function createDataFolders() {
   const vehiclesFile = path.join(dataPath, 'vehicles.json');
   if (!fs.existsSync(vehiclesFile)) {
     fs.writeFileSync(vehiclesFile, JSON.stringify([], null, 2));
+  }
+  // Создаем файл mechanics.json если его нет
+  const mechanicsFile = path.join(dataPath, 'mechanics.json');
+  if (!fs.existsSync(mechanicsFile)) {
+    fs.writeFileSync(mechanicsFile, JSON.stringify([], null, 2));
   }
 }
 
@@ -130,6 +136,55 @@ ipcMain.handle('save-vehicles', async (_event, vehicles) => {
     fs.writeFileSync(vehiclesFile, JSON.stringify(vehicles, null, 2));
     return { success: true };
   } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Получить журнал обслуживания техники
+ipcMain.handle('get-vehicle-maintenance', async (_event, vehicleId) => {
+  try {
+    const filePath = path.join(dataPath, 'vehicle-maintenance', `${vehicleId}.json`);
+    if (!fs.existsSync(filePath)) return [];
+    const data = fs.readFileSync(filePath, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Ошибка чтения журнала обслуживания:', error);
+    return [];
+  }
+});
+
+// Сохранить журнал обслуживания техники
+ipcMain.handle('save-vehicle-maintenance', async (_event, vehicleId, records) => {
+  try {
+    const filePath = path.join(dataPath, 'vehicle-maintenance', `${vehicleId}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(records, null, 2));
+    return { success: true };
+  } catch (error) {
+    console.error('Ошибка сохранения журнала обслуживания:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Получить список слесарей
+ipcMain.handle('get-mechanics', async () => {
+  try {
+    const mechanicsFile = path.join(dataPath, 'mechanics.json');
+    const data = fs.readFileSync(mechanicsFile, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Ошибка чтения слесарей:', error);
+    return [];
+  }
+});
+
+// Сохранить список слесарей
+ipcMain.handle('save-mechanics', async (_event, mechanics) => {
+  try {
+    const mechanicsFile = path.join(dataPath, 'mechanics.json');
+    fs.writeFileSync(mechanicsFile, JSON.stringify(mechanics, null, 2));
+    return { success: true };
+  } catch (error) {
+    console.error('Ошибка сохранения слесарей:', error);
     return { success: false, error: error.message };
   }
 });

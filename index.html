@@ -462,6 +462,71 @@
         </div>
     </div>
 
+    <!-- Модальное окно журнала обслуживания техники -->
+    <div id="vehicleMaintenanceModal" class="modal" style="display: none; z-index: 1500;">
+        <div class="modal-content maintenance-modal-content">
+            <div class="modal-header">
+                <h2 id="maintenanceModalTitle">🔧 Журнал обслуживания</h2>
+                <button id="closeMaintenanceModalBtn" class="btn-close">✖️</button>
+            </div>
+
+            <div class="maintenance-toolbar">
+                <button id="addMaintenanceRowBtn" class="btn btn-primary">➕ Добавить запись</button>
+                <button id="openMechanicsPopupBtn" class="btn btn-secondary">👥 Все водители и слесари</button>
+            </div>
+
+            <div class="maintenance-table-wrapper">
+                <table class="maintenance-table">
+                    <thead>
+                        <tr>
+                            <th style="min-width:130px">Дата</th>
+                            <th style="min-width:120px">Одометр / моточасы</th>
+                            <th style="min-width:180px">Вид работ</th>
+                            <th style="min-width:160px">Работники</th>
+                            <th style="min-width:160px">Замена запчастей</th>
+                            <th style="min-width:160px">Замена жидкостей</th>
+                            <th style="min-width:80px; text-align:center">Выполнено</th>
+                            <th style="min-width:160px">Примечание</th>
+                            <th style="min-width:50px"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="maintenanceTableBody"></tbody>
+                </table>
+            </div>
+
+            <div class="maintenance-footer">
+                <button id="saveMaintenanceBtn" class="btn btn-primary">💾 Сохранить</button>
+                <button id="closeMaintenanceBtn" class="btn btn-secondary">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Попап списка водителей и слесарей -->
+    <div id="mechanicsPopup" class="modal" style="display: none; z-index: 2500;">
+        <div class="modal-content" style="max-width: 480px;">
+            <div class="modal-header">
+                <h2>👥 Водители и слесари</h2>
+                <button id="closeMechanicsPopupBtn" class="btn-close">✖️</button>
+            </div>
+
+            <div class="mechanics-section">
+                <h3>Водители</h3>
+                <div id="mechanicsDriversList" class="mechanics-names-list"></div>
+            </div>
+
+            <div class="mechanics-section">
+                <h3>Слесари</h3>
+                <div id="mechanicsList" class="mechanics-names-list"></div>
+                <div class="mechanics-add-form">
+                    <input type="text" id="newMechanicLastName" class="form-control" placeholder="Фамилия">
+                    <input type="text" id="newMechanicFirstName" class="form-control" placeholder="Имя">
+                    <input type="text" id="newMechanicMiddleName" class="form-control" placeholder="Отчество">
+                    <button id="addMechanicBtn" class="btn btn-primary">➕</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast-уведомления -->
     <div id="toastContainer" class="toast-container"></div>
 

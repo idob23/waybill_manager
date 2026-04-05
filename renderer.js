@@ -15,6 +15,10 @@ let batchDriversData = {}; // Индивидуальные параметры к
 let activeBatchDriverId = null; // Текущая активная вкладка в пакетном модале
 let printerModalCallback = null; // Callback после выбора принтера
 let selectedPrinterName = null; // Выбранный принтер
+let currentMaintenanceVehicleId = null; // ID техники для журнала обслуживания
+let maintenanceRecords = []; // Записи журнала обслуживания
+let mechanics = []; // Массив слесарей
+let lastFocusedWorkersTextarea = null; // Последний активный textarea "Работники"
 
 // Сегодняшняя дата по UTC+10 (Якутия)
 function getTodayDate() {
@@ -125,6 +129,16 @@ const elements = {
     vehicleSelect: document.getElementById('vehicleSelect'),
     batchVehicleSelect: document.getElementById('batchVehicleSelect'),
 
+    // Журнал обслуживания
+    vehicleMaintenanceModal: document.getElementById('vehicleMaintenanceModal'),
+    maintenanceModalTitle: document.getElementById('maintenanceModalTitle'),
+    maintenanceTableBody: document.getElementById('maintenanceTableBody'),
+
+    // Попап слесарей
+    mechanicsPopup: document.getElementById('mechanicsPopup'),
+    mechanicsDriversList: document.getElementById('mechanicsDriversList'),
+    mechanicsList: document.getElementById('mechanicsList'),
+
     // Поля модального окна
     waybillDateFrom: document.getElementById('waybillDateFrom'),
     waybillDateTo: document.getElementById('waybillDateTo'),
@@ -213,7 +227,7 @@ function renderVehiclesList(filter = '') {
         return;
     }
     elements.vehiclesList.innerHTML = filtered.map(v => `
-        <div class="vehicle-item">
+        <div class="vehicle-item" data-id="${v.id}">
             <div class="vehicle-info">
                 <span class="vehicle-model">${v.model}</span>
                 <span class="vehicle-number">${v.number}</span>
@@ -273,6 +287,165 @@ async function deleteVehicle(id) {
     vehicles = vehicles.filter(v => v.id !== id);
     await api.saveVehicles(vehicles);
     renderVehiclesList(document.getElementById('vehicleSearchInput').value);
+}
+
+// ===== ЖУРНАЛ ОБСЛУЖИВАНИЯ =====
+
+async function openMaintenanceModal(vehicleId) {
+    const vehicle = vehicles.find(v => v.id === vehicleId);
+    if (!vehicle) return;
+    currentMaintenanceVehicleId = vehicleId;
+    elements.maintenanceModalTitle.textContent = `🔧 Журнал обслуживания: ${vehicle.model} — ${vehicle.number}`;
+    try {
+        maintenanceRecords = await api.getVehicleMaintenance(vehicleId);
+    } catch (err) {
+        console.error('Ошибка загрузки журнала:', err);
+        maintenanceRecords = [];
+    }
+    renderMaintenanceTable();
+    elements.vehicleMaintenanceModal.style.display = 'flex';
+}
+
+function closeMaintenanceModal() {
+    elements.vehicleMaintenanceModal.style.display = 'none';
+    currentMaintenanceVehicleId = null;
+    maintenanceRecords = [];
+    lastFocusedWorkersTextarea = null;
+}
+
+function renderMaintenanceTable() {
+    if (maintenanceRecords.length === 0) {
+        elements.maintenanceTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#95a5a6;padding:20px;">Нет записей. Нажмите "Добавить запись".</td></tr>';
+        return;
+    }
+    elements.maintenanceTableBody.innerHTML = maintenanceRecords.map((r, i) => `
+        <tr class="maintenance-row${r.completed ? ' maintenance-completed' : ''}" data-index="${i}">
+            <td><input type="date" class="m-input m-date" value="${r.date || ''}"></td>
+            <td><input type="text" class="m-input m-odometer" value="${r.odometer || ''}" placeholder="км / м.ч."></td>
+            <td><textarea class="m-input m-work-type" rows="2">${r.workType || ''}</textarea></td>
+            <td><textarea class="m-input m-workers" rows="2">${r.workers || ''}</textarea></td>
+            <td><textarea class="m-input m-parts" rows="2">${r.parts || ''}</textarea></td>
+            <td><textarea class="m-input m-fluids" rows="2">${r.fluids || ''}</textarea></td>
+            <td style="text-align:center"><input type="checkbox" class="m-completed" ${r.completed ? 'checked' : ''}></td>
+            <td><textarea class="m-input m-note" rows="2">${r.note || ''}</textarea></td>
+            <td><button class="btn-delete-maintenance" data-index="${i}" title="Удалить">🗑</button></td>
+        </tr>
+    `).join('');
+}
+
+function collectMaintenanceFromDOM() {
+    const rows = elements.maintenanceTableBody.querySelectorAll('.maintenance-row');
+    maintenanceRecords = Array.from(rows).map(row => ({
+        date: row.querySelector('.m-date').value,
+        odometer: row.querySelector('.m-odometer').value,
+        workType: row.querySelector('.m-work-type').value,
+        workers: row.querySelector('.m-workers').value,
+        parts: row.querySelector('.m-parts').value,
+        fluids: row.querySelector('.m-fluids').value,
+        completed: row.querySelector('.m-completed').checked,
+        note: row.querySelector('.m-note').value
+    }));
+}
+
+function addMaintenanceRow() {
+    collectMaintenanceFromDOM();
+    maintenanceRecords.push({
+        date: getTodayDate(), odometer: '', workType: '', workers: '',
+        parts: '', fluids: '', completed: false, note: ''
+    });
+    renderMaintenanceTable();
+    const wrapper = document.querySelector('.maintenance-table-wrapper');
+    if (wrapper) wrapper.scrollTop = wrapper.scrollHeight;
+}
+
+async function deleteMaintenanceRow(index) {
+    const confirmed = await showConfirm('Удалить эту запись?');
+    if (!confirmed) return;
+    collectMaintenanceFromDOM();
+    maintenanceRecords.splice(index, 1);
+    renderMaintenanceTable();
+}
+
+async function saveMaintenanceRecords() {
+    if (!currentMaintenanceVehicleId) return;
+    collectMaintenanceFromDOM();
+    try {
+        const result = await api.saveVehicleMaintenance(currentMaintenanceVehicleId, maintenanceRecords);
+        if (result.success) {
+            showToast('Журнал обслуживания сохранён');
+        } else {
+            showToast('Ошибка сохранения', 'error', 5000);
+        }
+    } catch (err) {
+        showToast('Ошибка сохранения: ' + err.message, 'error', 5000);
+    }
+}
+
+// ===== ПОПАП СЛЕСАРЕЙ =====
+
+async function openMechanicsPopup() {
+    elements.mechanicsDriversList.innerHTML = drivers.map(d => {
+        const fio = `${d.lastName} ${d.firstName} ${d.middleName || ''}`.trim();
+        return `<div class="mechanics-name-item" data-fio="${fio}">${fio}</div>`;
+    }).join('') || '<p style="color:#95a5a6">Нет водителей</p>';
+
+    try {
+        mechanics = await api.getMechanics();
+    } catch (err) {
+        mechanics = [];
+    }
+    renderMechanicsList();
+    elements.mechanicsPopup.style.display = 'flex';
+}
+
+function closeMechanicsPopup() {
+    elements.mechanicsPopup.style.display = 'none';
+}
+
+function renderMechanicsList() {
+    elements.mechanicsList.innerHTML = mechanics.map((m, i) => {
+        const fio = `${m.lastName} ${m.firstName} ${m.middleName || ''}`.trim();
+        return `<div class="mechanics-name-item" data-fio="${fio}">
+            <span>${fio}</span>
+            <button class="btn-delete-mechanic" data-index="${i}" title="Удалить">🗑</button>
+        </div>`;
+    }).join('') || '<p style="color:#95a5a6">Нет слесарей</p>';
+}
+
+async function addMechanic() {
+    const lastNameEl = document.getElementById('newMechanicLastName');
+    const firstNameEl = document.getElementById('newMechanicFirstName');
+    const middleNameEl = document.getElementById('newMechanicMiddleName');
+    const lastName = lastNameEl.value.trim();
+    const firstName = firstNameEl.value.trim();
+    const middleName = middleNameEl.value.trim();
+    if (!lastName && !firstName) return;
+    mechanics.push({ id: Date.now(), lastName, firstName, middleName });
+    await api.saveMechanics(mechanics);
+    lastNameEl.value = '';
+    firstNameEl.value = '';
+    middleNameEl.value = '';
+    renderMechanicsList();
+    lastNameEl.focus();
+}
+
+async function deleteMechanic(index) {
+    mechanics.splice(index, 1);
+    await api.saveMechanics(mechanics);
+    renderMechanicsList();
+}
+
+function insertWorkerName(fio) {
+    if (lastFocusedWorkersTextarea) {
+        const ta = lastFocusedWorkersTextarea;
+        const current = ta.value.trim();
+        ta.value = current ? current + ', ' + fio : fio;
+        ta.focus();
+        showToast(`Добавлено: ${fio}`, 'info', 1500);
+    } else {
+        navigator.clipboard.writeText(fio);
+        showToast(`Скопировано: ${fio}`, 'info', 1500);
+    }
 }
 
 // ===== ПРИНТЕР =====
@@ -1166,7 +1339,12 @@ function setupEventListeners() {
         const cancelBtn = e.target.closest('.btn-cancel-vehicle');
         if (cancelBtn) { renderVehiclesList(document.getElementById('vehicleSearchInput').value); return; }
         const btn = e.target.closest('.btn-delete-vehicle');
-        if (btn) deleteVehicle(Number(btn.dataset.id));
+        if (btn) { deleteVehicle(Number(btn.dataset.id)); return; }
+        // Клик на строку машины (не на кнопки) — открыть журнал обслуживания
+        const vehicleItem = e.target.closest('.vehicle-item');
+        if (vehicleItem && !e.target.closest('.vehicle-actions')) {
+            openMaintenanceModal(Number(vehicleItem.dataset.id));
+        }
     });
 
     // Выбор ТС из выпадающего списка заполняет поля марки/номера
@@ -1205,6 +1383,51 @@ function setupEventListeners() {
         const printer = selectedPrinterName;
         closePrinterSelectModal();
         if (cb) cb(printer);
+    });
+
+    // ===== Журнал обслуживания =====
+    document.getElementById('closeMaintenanceModalBtn').addEventListener('click', closeMaintenanceModal);
+    document.getElementById('closeMaintenanceBtn').addEventListener('click', closeMaintenanceModal);
+    elements.vehicleMaintenanceModal.addEventListener('click', (e) => {
+        if (e.target === elements.vehicleMaintenanceModal) closeMaintenanceModal();
+    });
+    document.getElementById('addMaintenanceRowBtn').addEventListener('click', addMaintenanceRow);
+    document.getElementById('saveMaintenanceBtn').addEventListener('click', saveMaintenanceRecords);
+    document.getElementById('openMechanicsPopupBtn').addEventListener('click', openMechanicsPopup);
+
+    elements.maintenanceTableBody.addEventListener('click', (e) => {
+        const delBtn = e.target.closest('.btn-delete-maintenance');
+        if (delBtn) deleteMaintenanceRow(Number(delBtn.dataset.index));
+    });
+
+    elements.maintenanceTableBody.addEventListener('change', (e) => {
+        if (e.target.classList.contains('m-completed')) {
+            const row = e.target.closest('.maintenance-row');
+            if (row) row.classList.toggle('maintenance-completed', e.target.checked);
+        }
+    });
+
+    elements.maintenanceTableBody.addEventListener('focus', (e) => {
+        if (e.target.classList.contains('m-workers')) {
+            lastFocusedWorkersTextarea = e.target;
+        }
+    }, true);
+
+    // ===== Попап слесарей =====
+    document.getElementById('closeMechanicsPopupBtn').addEventListener('click', closeMechanicsPopup);
+    elements.mechanicsPopup.addEventListener('click', (e) => {
+        if (e.target === elements.mechanicsPopup) { closeMechanicsPopup(); return; }
+        const nameItem = e.target.closest('.mechanics-name-item');
+        if (nameItem && !e.target.closest('.btn-delete-mechanic')) {
+            insertWorkerName(nameItem.dataset.fio);
+            return;
+        }
+        const delBtn = e.target.closest('.btn-delete-mechanic');
+        if (delBtn) deleteMechanic(Number(delBtn.dataset.index));
+    });
+    document.getElementById('addMechanicBtn').addEventListener('click', addMechanic);
+    document.getElementById('newMechanicMiddleName').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); addMechanic(); }
     });
 }
 

@@ -1202,3 +1202,183 @@ body {
     flex: 1;
     padding: 10px 20px;
 }
+
+/* ===== ЖУРНАЛ ОБСЛУЖИВАНИЯ ===== */
+
+.maintenance-modal-content {
+    max-width: 1200px;
+    width: 95%;
+}
+
+.maintenance-toolbar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.maintenance-table-wrapper {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: 55vh;
+    border: 1px solid #ecf0f1;
+    border-radius: 6px;
+    margin-bottom: 15px;
+}
+
+.maintenance-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1100px;
+}
+
+.maintenance-table thead th {
+    background: #34495e;
+    color: white;
+    padding: 10px 6px;
+    font-size: 13px;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    white-space: nowrap;
+}
+
+.maintenance-table tbody td {
+    padding: 4px;
+    vertical-align: top;
+    border-bottom: 1px solid #ecf0f1;
+}
+
+.m-input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #bdc3c7;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+
+.m-input:focus {
+    outline: none;
+    border-color: #1abc9c;
+}
+
+textarea.m-input {
+    resize: vertical;
+    min-height: 36px;
+}
+
+.m-completed {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: #27ae60;
+}
+
+.maintenance-row.maintenance-completed {
+    background: #e8f8f5;
+}
+
+.btn-delete-maintenance {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    opacity: 0.5;
+    padding: 4px 6px;
+    border-radius: 4px;
+    transition: opacity 0.15s, background 0.15s;
+}
+
+.btn-delete-maintenance:hover {
+    opacity: 1;
+    background: #fde8e8;
+}
+
+.maintenance-footer {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding-top: 10px;
+    border-top: 2px solid #ecf0f1;
+}
+
+.vehicle-item {
+    cursor: pointer;
+}
+
+/* ===== ПОПАП СЛЕСАРЕЙ ===== */
+
+.mechanics-section {
+    margin-bottom: 20px;
+}
+
+.mechanics-section h3 {
+    color: #2c3e50;
+    font-size: 16px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #ecf0f1;
+}
+
+.mechanics-names-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+}
+
+.mechanics-name-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.15s;
+    font-size: 14px;
+    color: #2c3e50;
+}
+
+.mechanics-name-item:hover {
+    background: #e8f8f5;
+}
+
+.mechanics-name-item .btn-delete-mechanic {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    opacity: 0.4;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: opacity 0.15s;
+}
+
+.mechanics-name-item .btn-delete-mechanic:hover {
+    opacity: 1;
+    background: #fde8e8;
+}
+
+.mechanics-add-form {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    align-items: center;
+}
+
+.mechanics-add-form .form-control {
+    flex: 1;
+    padding: 8px 10px;
+    font-size: 13px;
+}
+
+.mechanics-add-form .btn {
+    white-space: nowrap;
+    flex-shrink: 0;
+    padding: 8px 14px;
+    font-size: 13px;
+}
