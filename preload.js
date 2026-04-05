@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getMechanics: () => ipcRenderer.invoke('get-mechanics'),
   saveMechanics: (mechanics) => ipcRenderer.invoke('save-mechanics', mechanics),
 
+  // Печать журнала обслуживания
+  generateMaintenancePdf: (data) => ipcRenderer.invoke('generate-maintenance-pdf', data),
+
   // Координатный маппинг полей
   getFieldMapping: (templateName) => ipcRenderer.invoke('get-field-mapping', templateName),
   saveFieldMapping: (templateName, mapping) => ipcRenderer.invoke('save-field-mapping', templateName, mapping),

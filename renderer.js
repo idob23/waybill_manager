@@ -444,6 +444,53 @@ async function saveMaintenanceRecords() {
     }
 }
 
+// ===== ПЕЧАТЬ ЖУРНАЛА =====
+
+async function printMaintenanceJournal() {
+    const dateFrom = document.getElementById('maintenancePrintDateFrom').value;
+    const dateTo = document.getElementById('maintenancePrintDateTo').value;
+
+    const filtered = maintenanceRecords.filter(r => {
+        if (!r.date) return !dateFrom && !dateTo;
+        if (dateFrom && r.date < dateFrom) return false;
+        if (dateTo && r.date > dateTo) return false;
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        showToast('Нет записей за выбранный период', 'info');
+        return;
+    }
+
+    document.getElementById('maintenancePrintModal').style.display = 'none';
+
+    const vehicle = vehicles.find(v => v.id === currentMaintenanceVehicleId);
+    if (!vehicle) return;
+
+    openPrinterSelectModal(async (printerName) => {
+        try {
+            const pdfResult = await api.generateMaintenancePdf({
+                vehicle: { model: vehicle.model, number: vehicle.number },
+                records: filtered,
+                dateFrom,
+                dateTo
+            });
+            if (!pdfResult.success) {
+                showToast('Ошибка генерации PDF: ' + pdfResult.error, 'error', 5000);
+                return;
+            }
+            const printResult = await api.printFile(pdfResult.filePath, printerName);
+            if (printResult.success) {
+                showToast('Журнал отправлен на печать');
+            } else {
+                showToast('Ошибка печати: ' + printResult.failureReason, 'error', 5000);
+            }
+        } catch (err) {
+            showToast('Ошибка: ' + err.message, 'error', 5000);
+        }
+    });
+}
+
 // ===== ПОПАП СЛЕСАРЕЙ =====
 
 async function openMechanicsPopup() {
@@ -1457,6 +1504,23 @@ function setupEventListeners() {
     document.getElementById('addMaintenanceRowBtn').addEventListener('click', addMaintenanceRow);
     document.getElementById('saveMaintenanceBtn').addEventListener('click', saveMaintenanceRecords);
     document.getElementById('openMechanicsPopupBtn').addEventListener('click', openMechanicsPopup);
+
+    // Печать журнала
+    document.getElementById('printMaintenanceBtn').addEventListener('click', () => {
+        collectMaintenanceFromDOM();
+        if (maintenanceRecords.length === 0) { showToast('Нет записей', 'info'); return; }
+        const dates = maintenanceRecords.map(r => r.date).filter(Boolean).sort();
+        document.getElementById('maintenancePrintDateFrom').value = dates[0] || '';
+        document.getElementById('maintenancePrintDateTo').value = getTodayDate();
+        document.getElementById('maintenancePrintModal').style.display = 'flex';
+    });
+    document.getElementById('closeMaintenancePrintModalBtn').addEventListener('click', () => {
+        document.getElementById('maintenancePrintModal').style.display = 'none';
+    });
+    document.getElementById('cancelMaintenancePrintBtn').addEventListener('click', () => {
+        document.getElementById('maintenancePrintModal').style.display = 'none';
+    });
+    document.getElementById('confirmMaintenancePrintBtn').addEventListener('click', printMaintenanceJournal);
 
     elements.maintenanceTableBody.addEventListener('click', (e) => {
         const delBtn = e.target.closest('.btn-delete-maintenance');
