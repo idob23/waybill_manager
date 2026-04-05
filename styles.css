@@ -1164,13 +1164,41 @@ body {
 
 /* ===== CONFIRM-ДИАЛОГ ===== */
 
-#confirmDialog .modal-content {
+.confirm-dialog {
+    background: white;
+    border-radius: 12px;
+    padding: 30px 35px;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
     text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+
+.confirm-icon {
+    font-size: 36px;
+    line-height: 1;
 }
 
 #confirmMessage {
     font-size: 16px;
     color: #2c3e50;
-    margin-bottom: 20px;
+    line-height: 1.5;
     white-space: pre-line;
+    margin: 0;
+}
+
+.confirm-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+    width: 100%;
+}
+
+.confirm-actions .btn {
+    flex: 1;
+    padding: 10px 20px;
 }

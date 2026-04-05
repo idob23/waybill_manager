@@ -266,9 +266,13 @@ async function saveVehicleEdit(id, form) {
 }
 
 async function deleteVehicle(id) {
+    const vehicle = vehicles.find(v => v.id === id);
+    if (!vehicle) return;
+    const confirmed = await showConfirm(`Удалить технику ${vehicle.model} ${vehicle.number}?`);
+    if (!confirmed) return;
     vehicles = vehicles.filter(v => v.id !== id);
     await api.saveVehicles(vehicles);
-    renderVehiclesList();
+    renderVehiclesList(document.getElementById('vehicleSearchInput').value);
 }
 
 // ===== ПРИНТЕР =====

@@ -467,11 +467,12 @@
 
     <!-- Confirm-диалог -->
     <div id="confirmDialog" class="modal" style="display:none; z-index:3000;">
-        <div class="modal-content" style="max-width:400px;">
+        <div class="confirm-dialog">
+            <div class="confirm-icon">⚠️</div>
             <p id="confirmMessage"></p>
-            <div class="form-actions">
-                <button id="confirmYes" class="btn btn-primary">Да</button>
+            <div class="confirm-actions">
                 <button id="confirmNo" class="btn btn-secondary">Отмена</button>
+                <button id="confirmYes" class="btn btn-danger">Да, удалить</button>
             </div>
         </div>
     </div>
