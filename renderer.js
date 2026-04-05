@@ -1509,9 +1509,8 @@ function setupEventListeners() {
     document.getElementById('printMaintenanceBtn').addEventListener('click', () => {
         collectMaintenanceFromDOM();
         if (maintenanceRecords.length === 0) { showToast('Нет записей', 'info'); return; }
-        const dates = maintenanceRecords.map(r => r.date).filter(Boolean).sort();
-        document.getElementById('maintenancePrintDateFrom').value = dates[0] || '';
-        document.getElementById('maintenancePrintDateTo').value = getTodayDate();
+        document.getElementById('maintenancePrintDateFrom').value = '';
+        document.getElementById('maintenancePrintDateTo').value = '';
         document.getElementById('maintenancePrintModal').style.display = 'flex';
     });
     document.getElementById('closeMaintenancePrintModalBtn').addEventListener('click', () => {
