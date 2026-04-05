@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Печать журнала обслуживания
   generateMaintenancePdf: (data) => ipcRenderer.invoke('generate-maintenance-pdf', data),
+  saveMaintenancePdf: (data) => ipcRenderer.invoke('save-maintenance-pdf', data),
+  openMaintenanceReportsFolder: () => ipcRenderer.invoke('open-maintenance-reports-folder'),
 
   // Координатный маппинг полей
   getFieldMapping: (templateName) => ipcRenderer.invoke('get-field-mapping', templateName),

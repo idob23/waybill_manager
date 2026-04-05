@@ -491,6 +491,33 @@ async function printMaintenanceJournal() {
     });
 }
 
+async function saveMaintenancePdf() {
+    collectMaintenanceFromDOM();
+    if (maintenanceRecords.length === 0) {
+        showToast('Нет записей для сохранения', 'info');
+        return;
+    }
+
+    const vehicle = vehicles.find(v => v.id === currentMaintenanceVehicleId);
+    if (!vehicle) return;
+
+    try {
+        const result = await api.saveMaintenancePdf({
+            vehicle: { model: vehicle.model, number: vehicle.number },
+            records: maintenanceRecords,
+            dateFrom: '',
+            dateTo: ''
+        });
+        if (result.success) {
+            showToast(`PDF сохранён: ${result.fileName}`, 'success');
+        } else {
+            showToast('Ошибка сохранения: ' + result.error, 'error', 5000);
+        }
+    } catch (err) {
+        showToast('Ошибка: ' + err.message, 'error', 5000);
+    }
+}
+
 // ===== ПОПАП СЛЕСАРЕЙ =====
 
 async function openMechanicsPopup() {
@@ -1520,6 +1547,10 @@ function setupEventListeners() {
         document.getElementById('maintenancePrintModal').style.display = 'none';
     });
     document.getElementById('confirmMaintenancePrintBtn').addEventListener('click', printMaintenanceJournal);
+    document.getElementById('saveMaintenancePdfBtn').addEventListener('click', saveMaintenancePdf);
+    document.getElementById('openMaintenanceReportsFolderBtn').addEventListener('click', () => {
+        api.openMaintenanceReportsFolder();
+    });
 
     elements.maintenanceTableBody.addEventListener('click', (e) => {
         const delBtn = e.target.closest('.btn-delete-maintenance');

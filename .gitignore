@@ -5,5 +5,6 @@ data/templates/
 data/vehicles.json
 data/mechanics.json
 data/vehicle-maintenance/
+maintenance-reports/
 dist/
 .claude/

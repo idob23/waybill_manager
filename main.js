@@ -28,7 +28,8 @@ function createDataFolders() {
     dataPath,
     path.join(dataPath, 'templates'),
     path.join(dataPath, 'vehicle-maintenance'),
-    generatedDir
+    generatedDir,
+    path.join(appRootDir, 'maintenance-reports')
   ];
   
   folders.forEach(folder => {
@@ -541,120 +542,138 @@ ipcMain.handle('get-printers', async () => {
 });
 
 // Сгенерировать PDF журнала обслуживания
-ipcMain.handle('generate-maintenance-pdf', async (_event, data) => {
-  try {
-    const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
-    const fontkit = require('@pdf-lib/fontkit');
-    const { vehicle, records, dateFrom, dateTo } = data;
+async function generateMaintenancePdfDoc(data) {
+  const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+  const fontkit = require('@pdf-lib/fontkit');
+  const { vehicle, records, dateFrom, dateTo } = data;
 
-    const pdfDoc = await PDFDocument.create();
-    pdfDoc.registerFontkit(fontkit);
+  const pdfDoc = await PDFDocument.create();
+  pdfDoc.registerFontkit(fontkit);
 
-    let cyrFont;
-    for (const fp of [
-      process.env.WINDIR ? path.join(process.env.WINDIR, 'Fonts', 'arial.ttf') : null,
-      'C:/Windows/Fonts/arial.ttf',
-      'C:/Windows/Fonts/times.ttf',
-    ].filter(Boolean)) {
-      if (fs.existsSync(fp)) {
-        cyrFont = await pdfDoc.embedFont(fs.readFileSync(fp));
-        break;
-      }
+  let cyrFont;
+  for (const fp of [
+    process.env.WINDIR ? path.join(process.env.WINDIR, 'Fonts', 'arial.ttf') : null,
+    'C:/Windows/Fonts/arial.ttf',
+    'C:/Windows/Fonts/times.ttf',
+  ].filter(Boolean)) {
+    if (fs.existsSync(fp)) {
+      cyrFont = await pdfDoc.embedFont(fs.readFileSync(fp));
+      break;
     }
-    if (!cyrFont) cyrFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  }
+  if (!cyrFont) cyrFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-    const cols = [
-      { label: '№', w: 30 },
-      { label: 'Дата', w: 65 },
-      { label: 'Одометр', w: 60 },
-      { label: 'Вид работ', w: 140 },
-      { label: 'Работники', w: 110 },
-      { label: 'Запчасти', w: 100 },
-      { label: 'Жидкости', w: 100 },
-      { label: 'Выполн.', w: 45 },
-      { label: 'Примечание', w: 110 },
+  const cols = [
+    { label: '№', w: 30 },
+    { label: 'Дата', w: 65 },
+    { label: 'Одометр', w: 60 },
+    { label: 'Вид работ', w: 140 },
+    { label: 'Работники', w: 110 },
+    { label: 'Запчасти', w: 100 },
+    { label: 'Жидкости', w: 100 },
+    { label: 'Выполн.', w: 45 },
+    { label: 'Примечание', w: 110 },
+  ];
+  const margin = 30;
+  const rowH = 18;
+  const headerFontSize = 8;
+  const cellFontSize = 8;
+  const headerColor = rgb(52 / 255, 73 / 255, 94 / 255);
+  const altRowColor = rgb(245 / 255, 245 / 255, 245 / 255);
+
+  function fmtDate(d) {
+    if (!d) return '';
+    const parts = d.split('-');
+    return parts.length === 3 ? `${parts[2]}.${parts[1]}.${parts[0]}` : d;
+  }
+
+  function truncText(text, maxW, font, size) {
+    if (!text) return '';
+    let t = String(text).replace(/\n/g, ' ');
+    if (font.widthOfTextAtSize(t, size) <= maxW) return t;
+    while (t.length > 0 && font.widthOfTextAtSize(t + '…', size) > maxW) t = t.slice(0, -1);
+    return t + '…';
+  }
+
+  function drawHeader(page, y) {
+    let x = margin;
+    page.drawRectangle({ x, y: y - rowH, width: cols.reduce((s, c) => s + c.w, 0), height: rowH, color: headerColor });
+    for (const col of cols) {
+      page.drawText(col.label, { x: x + 3, y: y - rowH + 5, size: headerFontSize, font: cyrFont, color: rgb(1, 1, 1) });
+      x += col.w;
+    }
+    return y - rowH;
+  }
+
+  let page = pdfDoc.addPage([841.89, 595.28]);
+  let y = 595.28 - margin - 15;
+
+  // Заголовок
+  page.drawText(`Журнал обслуживания: ${vehicle.model} — ${vehicle.number}`, { x: margin, y, size: 14, font: cyrFont, color: headerColor });
+  y -= 20;
+
+  // Подзаголовок
+  const periodText = (dateFrom || dateTo) ? `Период: ${fmtDate(dateFrom) || '...'} — ${fmtDate(dateTo) || '...'}` : 'Все записи';
+  page.drawText(periodText, { x: margin, y, size: 10, font: cyrFont, color: rgb(0.5, 0.5, 0.5) });
+  y -= 20;
+
+  y = drawHeader(page, y);
+
+  for (let i = 0; i < records.length; i++) {
+    if (y - rowH < margin) {
+      page = pdfDoc.addPage([841.89, 595.28]);
+      y = 595.28 - margin;
+      y = drawHeader(page, y);
+    }
+
+    const r = records[i];
+    const rowY = y - rowH;
+
+    if (i % 2 === 1) {
+      page.drawRectangle({ x: margin, y: rowY, width: cols.reduce((s, c) => s + c.w, 0), height: rowH, color: altRowColor });
+    }
+
+    const values = [
+      String(i + 1),
+      fmtDate(r.date),
+      r.odometer || '',
+      r.workType || '',
+      r.workers || '',
+      r.parts || '',
+      r.fluids || '',
+      null, // completed — drawn as checkbox
+      r.note || '',
     ];
-    const margin = 30;
-    const rowH = 18;
-    const headerFontSize = 8;
-    const cellFontSize = 8;
-    const headerColor = rgb(52 / 255, 73 / 255, 94 / 255);
-    const altRowColor = rgb(245 / 255, 245 / 255, 245 / 255);
 
-    function fmtDate(d) {
-      if (!d) return '';
-      const parts = d.split('-');
-      return parts.length === 3 ? `${parts[2]}.${parts[1]}.${parts[0]}` : d;
-    }
-
-    function truncText(text, maxW, font, size) {
-      if (!text) return '';
-      let t = String(text).replace(/\n/g, ' ');
-      if (font.widthOfTextAtSize(t, size) <= maxW) return t;
-      while (t.length > 0 && font.widthOfTextAtSize(t + '…', size) > maxW) t = t.slice(0, -1);
-      return t + '…';
-    }
-
-    function drawHeader(page, y) {
-      let x = margin;
-      page.drawRectangle({ x, y: y - rowH, width: cols.reduce((s, c) => s + c.w, 0), height: rowH, color: headerColor });
-      for (const col of cols) {
-        page.drawText(col.label, { x: x + 3, y: y - rowH + 5, size: headerFontSize, font: cyrFont, color: rgb(1, 1, 1) });
-        x += col.w;
-      }
-      return y - rowH;
-    }
-
-    let page = pdfDoc.addPage([841.89, 595.28]);
-    let y = 595.28 - margin;
-
-    // Заголовок
-    page.drawText(`Журнал обслуживания: ${vehicle.model} — ${vehicle.number}`, { x: margin, y, size: 14, font: cyrFont, color: headerColor });
-    y -= 20;
-
-    // Подзаголовок
-    const periodText = (dateFrom || dateTo) ? `Период: ${fmtDate(dateFrom) || '...'} — ${fmtDate(dateTo) || '...'}` : 'Все записи';
-    page.drawText(periodText, { x: margin, y, size: 10, font: cyrFont, color: rgb(0.5, 0.5, 0.5) });
-    y -= 20;
-
-    y = drawHeader(page, y);
-
-    for (let i = 0; i < records.length; i++) {
-      if (y - rowH < margin) {
-        page = pdfDoc.addPage([841.89, 595.28]);
-        y = 595.28 - margin;
-        y = drawHeader(page, y);
-      }
-
-      const r = records[i];
-      const rowY = y - rowH;
-
-      if (i % 2 === 1) {
-        page.drawRectangle({ x: margin, y: rowY, width: cols.reduce((s, c) => s + c.w, 0), height: rowH, color: altRowColor });
-      }
-
-      const values = [
-        String(i + 1),
-        fmtDate(r.date),
-        r.odometer || '',
-        r.workType || '',
-        r.workers || '',
-        r.parts || '',
-        r.fluids || '',
-        r.completed ? '✓' : '—',
-        r.note || '',
-      ];
-
-      let x = margin;
-      for (let c = 0; c < cols.length; c++) {
+    let x = margin;
+    for (let c = 0; c < cols.length; c++) {
+      if (c === 7) {
+        // "Выполнено" column — draw checkbox
+        const centerX = x + cols[c].w / 2;
+        const centerY = rowY + rowH / 2;
+        const bx = centerX - 4;
+        const by = centerY - 4;
+        page.drawRectangle({ x: bx, y: by, width: 8, height: 8, borderColor: rgb(0, 0, 0), borderWidth: 1, color: undefined });
+        if (r.completed) {
+          // checkmark: short leg from bottom-left to bottom-center, long leg up to top-right
+          page.drawLine({ start: { x: bx + 1, y: by + 4 }, end: { x: bx + 3, y: by + 1.5 }, thickness: 1.5, color: rgb(0, 0, 0) });
+          page.drawLine({ start: { x: bx + 3, y: by + 1.5 }, end: { x: bx + 7, y: by + 6.5 }, thickness: 1.5, color: rgb(0, 0, 0) });
+        }
+      } else {
         const text = truncText(values[c], cols[c].w - 6, cyrFont, cellFontSize);
         page.drawText(text, { x: x + 3, y: rowY + 5, size: cellFontSize, font: cyrFont });
-        x += cols[c].w;
       }
-      y = rowY;
+      x += cols[c].w;
     }
+    y = rowY;
+  }
 
-    const pdfBytes = await pdfDoc.save();
+  return await pdfDoc.save();
+}
+
+ipcMain.handle('generate-maintenance-pdf', async (_event, data) => {
+  try {
+    const pdfBytes = await generateMaintenancePdfDoc(data);
     const filePath = path.join(app.getPath('temp'), `maintenance_${Date.now()}.pdf`);
     fs.writeFileSync(filePath, pdfBytes);
     return { success: true, filePath };
@@ -662,6 +681,25 @@ ipcMain.handle('generate-maintenance-pdf', async (_event, data) => {
     console.error('Ошибка генерации PDF журнала:', error);
     return { success: false, error: error.message };
   }
+});
+
+ipcMain.handle('save-maintenance-pdf', async (_event, data) => {
+  try {
+    const { vehicle, dateFrom, dateTo } = data;
+    const pdfBytes = await generateMaintenancePdfDoc(data);
+    const fileName = `${vehicle.model}_${vehicle.number}_${dateFrom || 'все'}_${dateTo || 'все'}.pdf`;
+    const filePath = path.join(appRootDir, 'maintenance-reports', fileName);
+    fs.writeFileSync(filePath, pdfBytes);
+    return { success: true, filePath, fileName };
+  } catch (error) {
+    console.error('Ошибка сохранения PDF журнала:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('open-maintenance-reports-folder', async () => {
+  const { shell } = require('electron');
+  shell.openPath(path.join(appRootDir, 'maintenance-reports'));
 });
 
 // Напечатать PDF-файл на выбранном принтере
