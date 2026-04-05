@@ -2,5 +2,8 @@ node_modules/
 generated/
 data/drivers.json
 data/templates/
+data/vehicles.json
+data/mechanics.json
+data/vehicle-maintenance/
 dist/
 .claude/
