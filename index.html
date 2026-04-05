@@ -462,6 +462,20 @@
         </div>
     </div>
 
+    <!-- Toast-уведомления -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Confirm-диалог -->
+    <div id="confirmDialog" class="modal" style="display:none; z-index:3000;">
+        <div class="modal-content" style="max-width:400px;">
+            <p id="confirmMessage"></p>
+            <div class="form-actions">
+                <button id="confirmYes" class="btn btn-primary">Да</button>
+                <button id="confirmNo" class="btn btn-secondary">Отмена</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Подключаем JavaScript -->
     <script src="renderer.js"></script>
 </body>

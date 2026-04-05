@@ -16,6 +16,40 @@ let activeBatchDriverId = null; // Текущая активная вкладк�
 let printerModalCallback = null; // Callback после выбора принтера
 let selectedPrinterName = null; // Выбранный принтер
 
+// ===== TOAST И CONFIRM (неблокирующие замены alert/confirm) =====
+
+function showToast(message, type = 'success', duration = 3000) {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 300);
+    }, duration);
+}
+
+function showConfirm(message) {
+    return new Promise((resolve) => {
+        const dialog = document.getElementById('confirmDialog');
+        document.getElementById('confirmMessage').textContent = message;
+        dialog.style.display = 'flex';
+        const yesBtn = document.getElementById('confirmYes');
+        const noBtn = document.getElementById('confirmNo');
+        function cleanup(result) {
+            dialog.style.display = 'none';
+            yesBtn.removeEventListener('click', onYes);
+            noBtn.removeEventListener('click', onNo);
+            resolve(result);
+        }
+        function onYes() { cleanup(true); }
+        function onNo() { cleanup(false); }
+        yesBtn.addEventListener('click', onYes);
+        noBtn.addEventListener('click', onNo);
+    });
+}
+
 // Получение элементов DOM
 const elements = {
     // Экраны
@@ -282,8 +316,8 @@ function closePrinterSelectModal() {
 // Сгенерировать одну путёвку + отправить на печать
 function generateAndPrint() {
     const templateName = elements.templateSelect.value;
-    if (!templateName) { alert('Выберите шаблон путевого листа'); return; }
-    if (!currentDriver) { alert('Водитель не выбран'); return; }
+    if (!templateName) { showToast('Выберите шаблон путевого листа', 'info'); return; }
+    if (!currentDriver) { showToast('Водитель не выбран', 'info'); return; }
 
     const waybillData = {
         date: formatDateRange(elements.waybillDateFrom.value, elements.waybillDateTo.value),
@@ -317,13 +351,13 @@ function generateAndPrint() {
             if (!result.success) throw new Error(result.error);
             const printResult = await api.printFile(result.filePath, printerName);
             if (printResult.success) {
-                alert(`Путевой лист создан и отправлен на печать!\nФайл: ${result.fileName}`);
+                showToast(`Путевой лист создан и отправлен на печать!\nФайл: ${result.fileName}`);
             } else {
-                alert(`Путевой лист создан, но ошибка печати: ${printResult.failureReason}\nФайл: ${result.fileName}`);
+                showToast(`Путевой лист создан, но ошибка печати: ${printResult.failureReason}\nФайл: ${result.fileName}`, 'error', 5000);
             }
             await api.openGeneratedFolder();
         } catch (error) {
-            alert('Ошибка: ' + error.message);
+            showToast('Ошибка: ' + error.message, 'error', 5000);
         }
     });
 }
@@ -333,7 +367,7 @@ async function generateBatchAndPrint() {
     saveBatchDriverForm();
 
     const templateName = elements.batchTemplateSelect.value;
-    if (!templateName) { alert('Выберите шаблон'); return; }
+    if (!templateName) { showToast('Выберите шаблон', 'info'); return; }
 
     const selectedDrivers = drivers.filter(d => selectedDriverIds.has(d.id));
     if (selectedDrivers.length === 0) return;
@@ -378,7 +412,7 @@ async function generateBatchAndPrint() {
 
         let msg = `Готово!\nСоздано путёвок: ${successCount} из ${selectedDrivers.length}\nОтправлено на печать: ${filePaths.length}`;
         if (errors.length > 0) msg += `\n\nОшибки:\n` + errors.join('\n');
-        alert(msg);
+        showToast(msg, errors.length > 0 ? 'error' : 'success', 5000);
 
         if (successCount > 0) await api.openGeneratedFolder();
     });
@@ -391,7 +425,7 @@ async function loadDrivers() {
         console.log('Загружено водителей:', drivers.length);
     } catch (error) {
         console.error('Ошибка загрузки водителей:', error);
-        alert('Ошибка загрузки данных водителей');
+        showToast('Ошибка загрузки данных водителей', 'error', 5000);
     }
 }
 
@@ -405,7 +439,7 @@ async function saveDrivers() {
         console.log('Водители сохранены успешно');
     } catch (error) {
         console.error('Ошибка сохранения водителей:', error);
-        alert('Ошибка сохранения данных');
+        showToast('Ошибка сохранения данных', 'error', 5000);
     }
 }
 
@@ -609,7 +643,7 @@ async function generateBatchWaybills(e) {
     saveBatchDriverForm(); // сохраняем текущую вкладку
 
     const templateName = elements.batchTemplateSelect.value;
-    if (!templateName) { alert('Выберите шаблон'); return; }
+    if (!templateName) { showToast('Выберите шаблон', 'info'); return; }
 
     const selectedDrivers = drivers.filter(d => selectedDriverIds.has(d.id));
     if (selectedDrivers.length === 0) return;
@@ -650,7 +684,7 @@ async function generateBatchWaybills(e) {
 
     let msg = `Готово!\nСоздано путёвок: ${successCount} из ${selectedDrivers.length}`;
     if (errors.length > 0) msg += `\n\nОшибки:\n` + errors.join('\n');
-    alert(msg);
+    showToast(msg, errors.length > 0 ? 'error' : 'success', 5000);
 
     if (successCount > 0) await api.openGeneratedFolder();
 }
@@ -680,7 +714,7 @@ function renderTemplatesList(templates) {
         });
 
         templateItem.querySelector('.btn-delete-tpl').addEventListener('click', async () => {
-            if (confirm(`Удалить шаблон "${template}"?`)) {
+            if (await showConfirm(`Удалить шаблон "${template}"?`)) {
                 await deleteTemplate(template);
             }
         });
@@ -750,7 +784,7 @@ function editDriver() {
 async function deleteDriver() {
     if (!currentDriver) return;
     
-    const confirmed = confirm(`Удалить водителя ${currentDriver.lastName} ${currentDriver.firstName}?`);
+    const confirmed = await showConfirm(`Удалить водителя ${currentDriver.lastName} ${currentDriver.firstName}?`);
     if (!confirmed) return;
     
     drivers = drivers.filter(d => d.id !== currentDriver.id);
@@ -797,7 +831,7 @@ function validateDriverForm() {
     }
 
     if (!isValid) {
-        alert('Ошибки:\n\n' + errors.join('\n'));
+        showToast('Ошибки:\n' + errors.join('\n'), 'error', 5000);
     }
     return isValid;
 }
@@ -864,11 +898,11 @@ async function uploadTemplate() {
         if (result.success) {
             console.log('Шаблон загружен:', result.fileName);
             await loadTemplates();
-            alert('Шаблон успешно загружен!');
+            showToast('Шаблон успешно загружен!');
         }
     } catch (error) {
         console.error('Ошибка загрузки шаблона:', error);
-        alert('Ошибка загрузки шаблона');
+        showToast('Ошибка загрузки шаблона', 'error', 5000);
     }
 }
 
@@ -878,11 +912,11 @@ async function deleteTemplate(templateName) {
         const result = await api.deleteTemplate(templateName);
         if (result.success) {
             await loadTemplates();
-            alert('Шаблон удален');
+            showToast('Шаблон удален');
         }
     } catch (error) {
         console.error('Ошибка удаления шаблона:', error);
-        alert('Ошибка удаления шаблона');
+        showToast('Ошибка удаления шаблона', 'error', 5000);
     }
 }
 
@@ -891,12 +925,12 @@ function openWaybillModal() {
     const templateName = elements.templateSelect.value;
 
     if (!templateName) {
-        alert('Выберите шаблон путевого листа');
+        showToast('Выберите шаблон путевого листа', 'info');
         return;
     }
 
     if (!currentDriver) {
-        alert('Водитель не выбран');
+        showToast('Водитель не выбран', 'info');
         return;
     }
 
@@ -984,15 +1018,16 @@ async function generateWaybill(e) {
 
         if (result.success) {
             if (result.usedMapping) {
-                alert(`Путевой лист создан!\nЗаполнено полей: ${result.fieldsFilled}\nФайл: ${result.fileName}`);
+                showToast(`Путевой лист создан!\nЗаполнено полей: ${result.fieldsFilled}\nФайл: ${result.fileName}`);
             } else if (result.fieldsFound === 0) {
-                alert(
+                showToast(
                     `Путевой лист сохранён, но данные не были вставлены.\n` +
-                    `Убедитесь, что шаблон содержит AcroForm-поля с нужными именами.\n\n` +
-                    `Файл: ${result.fileName}`
+                    `Убедитесь, что шаблон содержит AcroForm-поля с нужными именами.\n` +
+                    `Файл: ${result.fileName}`,
+                    'info', 5000
                 );
             } else {
-                alert(`Путевой лист создан!\nЗаполнено полей: ${result.fieldsFilled} из ${result.fieldsFound}\nФайл: ${result.fileName}`);
+                showToast(`Путевой лист создан!\nЗаполнено полей: ${result.fieldsFilled} из ${result.fieldsFound}\nФайл: ${result.fileName}`);
             }
             await api.openGeneratedFolder();
         } else {
@@ -1000,7 +1035,7 @@ async function generateWaybill(e) {
         }
     } catch (error) {
         console.error('Ошибка генерации путевого листа:', error);
-        alert('Ошибка создания путевого листа: ' + error.message);
+        showToast('Ошибка создания путевого листа: ' + error.message, 'error', 5000);
     }
 }
 
@@ -1248,7 +1283,7 @@ async function loadEditorPdf(templateName) {
         updatePageNav();
     } catch (error) {
         console.error('Ошибка загрузки PDF в редактор:', error);
-        alert('Ошибка загрузки шаблона: ' + error.message);
+        showToast('Ошибка загрузки шаблона: ' + error.message, 'error', 5000);
     }
 }
 
@@ -1443,7 +1478,7 @@ async function handleCanvasClick(e) {
     if (isDraggingMarker) return; // игнорируем клик после перетаскивания
     const selectedKey = elements.fieldTypeSelect.value;
     if (!selectedKey) {
-        alert('Сначала выберите поле из списка слева');
+        showToast('Сначала выберите поле из списка слева', 'info');
         return;
     }
     if (!pdfJsDoc) return;
@@ -1482,12 +1517,12 @@ async function saveFieldMapping() {
     try {
         const result = await api.saveFieldMapping(editorTemplateName, editorMapping);
         if (result.success) {
-            alert(`Маппинг сохранён! Размещено полей: ${editorMapping.fields.length}`);
+            showToast(`Маппинг сохранён! Размещено полей: ${editorMapping.fields.length}`);
         } else {
             throw new Error(result.error);
         }
     } catch (error) {
-        alert('Ошибка сохранения: ' + error.message);
+        showToast('Ошибка сохранения: ' + error.message, 'error', 5000);
     }
 }
 
