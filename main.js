@@ -735,11 +735,25 @@ ipcMain.handle('generate-maintenance-pdf', async (_event, data) => {
   }
 });
 
+function formatDateForFilename(dateStr) {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  return dateStr;
+}
+
 ipcMain.handle('save-maintenance-pdf', async (_event, data) => {
   try {
     const { vehicle, dateFrom, dateTo } = data;
     const pdfBytes = await generateMaintenancePdfDoc(data);
-    const fileName = `${vehicle.model}_${vehicle.number}_${dateFrom || 'все'}_${dateTo || 'все'}.pdf`;
+    let fileName;
+    if (!dateFrom && !dateTo) {
+      fileName = `${vehicle.model}_${vehicle.number}.pdf`;
+    } else if (dateFrom && dateTo) {
+      fileName = `${vehicle.model}_${vehicle.number}_${formatDateForFilename(dateFrom)}_${formatDateForFilename(dateTo)}.pdf`;
+    } else {
+      fileName = `${vehicle.model}_${vehicle.number}_${formatDateForFilename(dateFrom || dateTo)}.pdf`;
+    }
     const filePath = path.join(appRootDir, 'maintenance-reports', fileName);
     fs.writeFileSync(filePath, pdfBytes);
     return { success: true, filePath, fileName };

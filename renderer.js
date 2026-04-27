@@ -478,6 +478,18 @@ async function saveMaintenanceRecords() {
         if (result.success) {
             vehiclesMaintenanceStatus[currentMaintenanceVehicleId] = maintenanceRecords.length > 0;
             showToast('Журнал обслуживания сохранён');
+            // Фоновое автосохранение полного PDF
+            if (maintenanceRecords.length > 0) {
+                const vehicle = vehicles.find(v => v.id === currentMaintenanceVehicleId);
+                if (vehicle) {
+                    api.saveMaintenancePdf({
+                        vehicle: { model: vehicle.model, number: vehicle.number },
+                        records: maintenanceRecords,
+                        dateFrom: '',
+                        dateTo: ''
+                    }).catch(() => {});
+                }
+            }
         } else {
             showToast('Ошибка сохранения', 'error', 5000);
         }
@@ -1519,6 +1531,9 @@ function setupEventListeners() {
     document.getElementById('vehiclesWithMaintenanceFilter').addEventListener('change', () => {
         const searchValue = document.getElementById('vehicleSearchInput').value;
         renderVehiclesList(searchValue);
+    });
+    document.getElementById('openMaintenanceReportsFolderBtnWelcome').addEventListener('click', () => {
+        api.openMaintenanceReportsFolder();
     });
     elements.vehiclesBtn.addEventListener('click', openVehiclesModal);
     document.getElementById('closeVehiclesModalBtn').addEventListener('click', closeVehiclesModal);
