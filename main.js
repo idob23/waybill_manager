@@ -575,9 +575,13 @@ async function generateMaintenancePdfDoc(data) {
     { label: 'Примечание', w: 110 },
   ];
   const margin = 30;
-  const rowH = 18;
-  const headerFontSize = 8;
+  const headerRowH = 18;
   const cellFontSize = 8;
+  const headerFontSize = 8;
+  const lineHeight = cellFontSize * 1.4;
+  const cellPadding = 8;
+  const minRowH = 20;
+  const tableWidth = cols.reduce((s, c) => s + c.w, 0);
   const headerColor = rgb(52 / 255, 73 / 255, 94 / 255);
   const altRowColor = rgb(245 / 255, 245 / 255, 245 / 255);
 
@@ -587,22 +591,48 @@ async function generateMaintenancePdfDoc(data) {
     return parts.length === 3 ? `${parts[2]}.${parts[1]}.${parts[0]}` : d;
   }
 
-  function truncText(text, maxW, font, size) {
-    if (!text) return '';
-    let t = String(text).replace(/\n/g, ' ');
-    if (font.widthOfTextAtSize(t, size) <= maxW) return t;
-    while (t.length > 0 && font.widthOfTextAtSize(t + '…', size) > maxW) t = t.slice(0, -1);
-    return t + '…';
+  function wrapText(text, maxW, font, size) {
+    if (!text) return [''];
+    const str = String(text).replace(/\n/g, ' ').trim();
+    if (!str) return [''];
+    const words = str.split(/\s+/);
+    const lines = [];
+    let currentLine = '';
+    for (const word of words) {
+      if (font.widthOfTextAtSize(word, size) > maxW) {
+        if (currentLine) { lines.push(currentLine); currentLine = ''; }
+        let chunk = '';
+        for (const ch of word) {
+          if (font.widthOfTextAtSize(chunk + ch, size) > maxW) {
+            if (chunk) lines.push(chunk);
+            chunk = ch;
+          } else {
+            chunk += ch;
+          }
+        }
+        if (chunk) currentLine = chunk;
+      } else {
+        const test = currentLine ? currentLine + ' ' + word : word;
+        if (font.widthOfTextAtSize(test, size) > maxW) {
+          lines.push(currentLine);
+          currentLine = word;
+        } else {
+          currentLine = test;
+        }
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+    return lines.length ? lines : [''];
   }
 
   function drawHeader(page, y) {
     let x = margin;
-    page.drawRectangle({ x, y: y - rowH, width: cols.reduce((s, c) => s + c.w, 0), height: rowH, color: headerColor });
+    page.drawRectangle({ x, y: y - headerRowH, width: tableWidth, height: headerRowH, color: headerColor });
     for (const col of cols) {
-      page.drawText(col.label, { x: x + 3, y: y - rowH + 5, size: headerFontSize, font: cyrFont, color: rgb(1, 1, 1) });
+      page.drawText(col.label, { x: x + 3, y: y - headerRowH + 5, size: headerFontSize, font: cyrFont, color: rgb(1, 1, 1) });
       x += col.w;
     }
-    return y - rowH;
+    return y - headerRowH;
   }
 
   let page = pdfDoc.addPage([841.89, 595.28]);
@@ -620,18 +650,7 @@ async function generateMaintenancePdfDoc(data) {
   y = drawHeader(page, y);
 
   for (let i = 0; i < records.length; i++) {
-    if (y - rowH < margin) {
-      page = pdfDoc.addPage([841.89, 595.28]);
-      y = 595.28 - margin;
-      y = drawHeader(page, y);
-    }
-
     const r = records[i];
-    const rowY = y - rowH;
-
-    if (i % 2 === 1) {
-      page.drawRectangle({ x: margin, y: rowY, width: cols.reduce((s, c) => s + c.w, 0), height: rowH, color: altRowColor });
-    }
 
     const values = [
       String(i + 1),
@@ -645,23 +664,56 @@ async function generateMaintenancePdfDoc(data) {
       r.note || '',
     ];
 
+    // Wrap text for each cell and compute row height
+    const wrappedCells = values.map((val, c) => {
+      if (c === 7) return ['']; // checkbox column
+      return wrapText(val, cols[c].w - 6, cyrFont, cellFontSize);
+    });
+    const maxLines = Math.max(...wrappedCells.map(lines => lines.length));
+    const rowH = Math.max(minRowH, maxLines * lineHeight + cellPadding);
+
+    // New page if needed
+    if (y - rowH < margin) {
+      page = pdfDoc.addPage([841.89, 595.28]);
+      y = 595.28 - margin;
+      y = drawHeader(page, y);
+    }
+
+    const rowY = y - rowH;
+
+    // Alternating row background
+    if (i % 2 === 1) {
+      page.drawRectangle({ x: margin, y: rowY, width: tableWidth, height: rowH, color: altRowColor });
+    }
+
+    // Draw cells
     let x = margin;
     for (let c = 0; c < cols.length; c++) {
       if (c === 7) {
-        // "Выполнено" column — draw checkbox
+        // "Выполнено" column — draw checkbox centered vertically
         const centerX = x + cols[c].w / 2;
         const centerY = rowY + rowH / 2;
         const bx = centerX - 4;
         const by = centerY - 4;
         page.drawRectangle({ x: bx, y: by, width: 8, height: 8, borderColor: rgb(0, 0, 0), borderWidth: 1, color: undefined });
         if (r.completed) {
-          // checkmark: short leg from bottom-left to bottom-center, long leg up to top-right
           page.drawLine({ start: { x: bx + 1, y: by + 4 }, end: { x: bx + 3, y: by + 1.5 }, thickness: 1.5, color: rgb(0, 0, 0) });
           page.drawLine({ start: { x: bx + 3, y: by + 1.5 }, end: { x: bx + 7, y: by + 6.5 }, thickness: 1.5, color: rgb(0, 0, 0) });
         }
+      } else if (c === 0) {
+        // "№" column — centered vertically
+        const textW = cyrFont.widthOfTextAtSize(wrappedCells[c][0], cellFontSize);
+        const tx = x + (cols[c].w - textW) / 2;
+        const ty = rowY + rowH / 2 - cellFontSize / 2;
+        page.drawText(wrappedCells[c][0], { x: tx, y: ty, size: cellFontSize, font: cyrFont });
       } else {
-        const text = truncText(values[c], cols[c].w - 6, cyrFont, cellFontSize);
-        page.drawText(text, { x: x + 3, y: rowY + 5, size: cellFontSize, font: cyrFont });
+        // Multi-line text cell
+        const lines = wrappedCells[c];
+        let ty = rowY + rowH - cellPadding / 2 - cellFontSize;
+        for (const line of lines) {
+          page.drawText(line, { x: x + 3, y: ty, size: cellFontSize, font: cyrFont });
+          ty -= lineHeight;
+        }
       }
       x += cols[c].w;
     }

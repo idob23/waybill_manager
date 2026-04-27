@@ -19,6 +19,8 @@ let currentMaintenanceVehicleId = null; // ID техники для журнал
 let maintenanceRecords = []; // Записи журнала обслуживания
 let mechanics = []; // Массив слесарей
 let lastFocusedWorkersTextarea = null; // Последний активный textarea "Работники"
+let maintenancePrintMode = null; // 'print' или 'save'
+let vehiclesMaintenanceStatus = {}; // { vehicleId: boolean } — есть ли записи в журнале
 
 // Сегодняшняя дата по UTC+10 (Якутия)
 function getTodayDate() {
@@ -126,8 +128,8 @@ const elements = {
     vehiclesBtn: document.getElementById('vehiclesBtn'),
     vehiclesModal: document.getElementById('vehiclesModal'),
     vehiclesList: document.getElementById('vehiclesList'),
-    vehicleSelect: document.getElementById('vehicleSelect'),
-    batchVehicleSelect: document.getElementById('batchVehicleSelect'),
+    vehicleSearchSelect: document.getElementById('vehicleSearchSelect'),
+    batchVehicleSearchSelect: document.getElementById('batchVehicleSearchSelect'),
 
     // Журнал обслуживания
     vehicleMaintenanceModal: document.getElementById('vehicleMaintenanceModal'),
@@ -195,17 +197,51 @@ async function loadVehicles() {
     }
 }
 
-function populateVehicleSelects() {
-    const options = vehicles.map(v =>
-        `<option value="${v.id}">${v.model} — ${v.number}</option>`
-    ).join('');
-    const placeholder = '<option value="">— или выбрать из списка техники —</option>';
-    elements.vehicleSelect.innerHTML = placeholder + options;
-    elements.batchVehicleSelect.innerHTML = placeholder + options;
+function renderVehicleDropdown(inputId, dropdownId, targetModelId, targetNumberId) {
+    const input = document.getElementById(inputId);
+    const dropdown = document.getElementById(dropdownId);
+    const query = input.value.trim().toLowerCase();
+
+    const filtered = vehicles.filter(v => {
+        if (!query) return true;
+        return v.model.toLowerCase().includes(query) || v.number.toLowerCase().includes(query);
+    });
+
+    if (filtered.length === 0) {
+        dropdown.innerHTML = '<div class="vehicle-dropdown-empty">Ничего не найдено</div>';
+    } else {
+        dropdown.innerHTML = filtered.map(v =>
+            `<div class="vehicle-dropdown-item" data-model="${v.model}" data-number="${v.number}">${v.model} — ${v.number}</div>`
+        ).join('');
+    }
+    dropdown.style.display = 'block';
+
+    dropdown.onclick = (e) => {
+        const item = e.target.closest('.vehicle-dropdown-item');
+        if (!item) return;
+        input.value = `${item.dataset.model} — ${item.dataset.number}`;
+        document.getElementById(targetModelId).value = item.dataset.model;
+        document.getElementById(targetNumberId).value = item.dataset.number;
+        dropdown.style.display = 'none';
+    };
 }
 
-function openVehiclesModal() {
+async function loadVehiclesMaintenanceStatus() {
+    vehiclesMaintenanceStatus = {};
+    for (const vehicle of vehicles) {
+        try {
+            const records = await api.getVehicleMaintenance(vehicle.id);
+            vehiclesMaintenanceStatus[vehicle.id] = records.length > 0;
+        } catch (err) {
+            vehiclesMaintenanceStatus[vehicle.id] = false;
+        }
+    }
+}
+
+async function openVehiclesModal() {
     document.getElementById('vehicleSearchInput').value = '';
+    document.getElementById('vehiclesWithMaintenanceFilter').checked = false;
+    await loadVehiclesMaintenanceStatus();
     renderVehiclesList();
     elements.vehiclesModal.style.display = 'flex';
     setTimeout(() => document.getElementById('vehicleSearchInput').focus(), 50);
@@ -221,9 +257,15 @@ function renderVehiclesList(filter = '') {
         return;
     }
     const f = filter.toLowerCase();
-    const filtered = f ? vehicles.filter(v => v.model.toLowerCase().includes(f) || v.number.toLowerCase().includes(f)) : vehicles;
+    const maintenanceOnly = document.getElementById('vehiclesWithMaintenanceFilter').checked;
+    let filtered = f ? vehicles.filter(v => v.model.toLowerCase().includes(f) || v.number.toLowerCase().includes(f)) : [...vehicles];
+    if (maintenanceOnly) {
+        filtered = filtered.filter(v => vehiclesMaintenanceStatus[v.id] === true);
+    }
     if (filtered.length === 0) {
-        elements.vehiclesList.innerHTML = '<p class="vehicles-empty">Ничего не найдено</p>';
+        elements.vehiclesList.innerHTML = maintenanceOnly
+            ? '<p class="vehicles-empty">Нет техники с записями ТО</p>'
+            : '<p class="vehicles-empty">Ничего не найдено</p>';
         return;
     }
     elements.vehiclesList.innerHTML = filtered.map(v => `
@@ -275,7 +317,6 @@ async function saveVehicleEdit(id, form) {
     vehicle.model = form.querySelector('[data-field="model"]').value.trim();
     vehicle.number = form.querySelector('[data-field="number"]').value.trim();
     await api.saveVehicles(vehicles);
-    populateVehicleSelects();
     renderVehiclesList(document.getElementById('vehicleSearchInput').value);
 }
 
@@ -435,6 +476,7 @@ async function saveMaintenanceRecords() {
     try {
         const result = await api.saveVehicleMaintenance(currentMaintenanceVehicleId, maintenanceRecords);
         if (result.success) {
+            vehiclesMaintenanceStatus[currentMaintenanceVehicleId] = maintenanceRecords.length > 0;
             showToast('Журнал обслуживания сохранён');
         } else {
             showToast('Ошибка сохранения', 'error', 5000);
@@ -492,11 +534,22 @@ async function printMaintenanceJournal() {
 }
 
 async function saveMaintenancePdf() {
-    collectMaintenanceFromDOM();
-    if (maintenanceRecords.length === 0) {
-        showToast('Нет записей для сохранения', 'info');
+    const dateFrom = document.getElementById('maintenancePrintDateFrom').value;
+    const dateTo = document.getElementById('maintenancePrintDateTo').value;
+
+    const filtered = maintenanceRecords.filter(r => {
+        if (!r.date) return !dateFrom && !dateTo;
+        if (dateFrom && r.date < dateFrom) return false;
+        if (dateTo && r.date > dateTo) return false;
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        showToast('Нет записей за выбранный период', 'info');
         return;
     }
+
+    document.getElementById('maintenancePrintModal').style.display = 'none';
 
     const vehicle = vehicles.find(v => v.id === currentMaintenanceVehicleId);
     if (!vehicle) return;
@@ -504,9 +557,9 @@ async function saveMaintenancePdf() {
     try {
         const result = await api.saveMaintenancePdf({
             vehicle: { model: vehicle.model, number: vehicle.number },
-            records: maintenanceRecords,
-            dateFrom: '',
-            dateTo: ''
+            records: filtered,
+            dateFrom,
+            dateTo
         });
         if (result.success) {
             showToast(`PDF сохранён: ${result.fileName}`, 'success');
@@ -893,7 +946,7 @@ function openBatchModal() {
     activeBatchDriverId = selectedDrivers[0].id;
 
     elements.batchTemplateSelect.innerHTML = elements.templateSelect.innerHTML;
-    populateVehicleSelects();
+    elements.batchVehicleSearchSelect.value = '';
 
     renderBatchDriverTabs(selectedDrivers);
     loadBatchDriverForm(activeBatchDriverId);
@@ -939,7 +992,9 @@ function loadBatchDriverForm(driverId) {
     document.getElementById('batchDepartureTime').value  = data.departureTime;
     document.getElementById('batchReturnTime').value     = data.returnTime;
     document.getElementById('batchRoute').value          = data.route;
-    elements.batchVehicleSelect.value = '';
+    const batchModel = data.vehicleModel || '';
+    const batchNumber = data.vehicleNumber || '';
+    elements.batchVehicleSearchSelect.value = (batchModel || batchNumber) ? `${batchModel} — ${batchNumber}` : '';
 }
 
 function switchBatchDriver(driverId) {
@@ -1274,8 +1329,10 @@ function openWaybillModal() {
 
     elements.waybillNumber.value = '';
 
-    // Заполняем список техники
-    populateVehicleSelects();
+    // Очищаем поиск ТС (предзаполняем если есть сохранённые данные)
+    const savedModel = elements.vehicleModel.value;
+    const savedNumber = elements.vehicleNumber.value;
+    elements.vehicleSearchSelect.value = (savedModel || savedNumber) ? `${savedModel} — ${savedNumber}` : '';
 
     // Показываем модальное окно
     elements.waybillModal.style.display = 'flex';
@@ -1459,6 +1516,10 @@ function setupEventListeners() {
     document.getElementById('vehicleSearchInput').addEventListener('input', (e) => {
         renderVehiclesList(e.target.value);
     });
+    document.getElementById('vehiclesWithMaintenanceFilter').addEventListener('change', () => {
+        const searchValue = document.getElementById('vehicleSearchInput').value;
+        renderVehiclesList(searchValue);
+    });
     elements.vehiclesBtn.addEventListener('click', openVehiclesModal);
     document.getElementById('closeVehiclesModalBtn').addEventListener('click', closeVehiclesModal);
     elements.vehiclesModal.addEventListener('click', (e) => {
@@ -1484,19 +1545,25 @@ function setupEventListeners() {
         }
     });
 
-    // Выбор ТС из выпадающего списка заполняет поля марки/номера
-    elements.vehicleSelect.addEventListener('change', (e) => {
-        const v = vehicles.find(x => x.id === Number(e.target.value));
-        if (v) {
-            elements.vehicleModel.value = v.model;
-            elements.vehicleNumber.value = v.number;
-        }
+    // Поиск ТС с выпадающим списком
+    elements.vehicleSearchSelect.addEventListener('input', () => {
+        renderVehicleDropdown('vehicleSearchSelect', 'vehicleSearchDropdown', 'vehicleModel', 'vehicleNumber');
     });
-    elements.batchVehicleSelect.addEventListener('change', (e) => {
-        const v = vehicles.find(x => x.id === Number(e.target.value));
-        if (v) {
-            document.getElementById('batchVehicleModel').value = v.model;
-            document.getElementById('batchVehicleNumber').value = v.number;
+    elements.vehicleSearchSelect.addEventListener('focus', () => {
+        renderVehicleDropdown('vehicleSearchSelect', 'vehicleSearchDropdown', 'vehicleModel', 'vehicleNumber');
+    });
+    elements.batchVehicleSearchSelect.addEventListener('input', () => {
+        renderVehicleDropdown('batchVehicleSearchSelect', 'batchVehicleSearchDropdown', 'batchVehicleModel', 'batchVehicleNumber');
+    });
+    elements.batchVehicleSearchSelect.addEventListener('focus', () => {
+        renderVehicleDropdown('batchVehicleSearchSelect', 'batchVehicleSearchDropdown', 'batchVehicleModel', 'batchVehicleNumber');
+    });
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#vehicleSearchSelect') && !e.target.closest('#vehicleSearchDropdown')) {
+            document.getElementById('vehicleSearchDropdown').style.display = 'none';
+        }
+        if (!e.target.closest('#batchVehicleSearchSelect') && !e.target.closest('#batchVehicleSearchDropdown')) {
+            document.getElementById('batchVehicleSearchDropdown').style.display = 'none';
         }
     });
 
@@ -1536,8 +1603,11 @@ function setupEventListeners() {
     document.getElementById('printMaintenanceBtn').addEventListener('click', () => {
         collectMaintenanceFromDOM();
         if (maintenanceRecords.length === 0) { showToast('Нет записей', 'info'); return; }
+        maintenancePrintMode = 'print';
         document.getElementById('maintenancePrintDateFrom').value = '';
         document.getElementById('maintenancePrintDateTo').value = '';
+        document.querySelector('#maintenancePrintModal .modal-header h2').textContent = '🖨 Печать журнала';
+        document.getElementById('confirmMaintenancePrintBtn').textContent = '🖨 Печатать';
         document.getElementById('maintenancePrintModal').style.display = 'flex';
     });
     document.getElementById('closeMaintenancePrintModalBtn').addEventListener('click', () => {
@@ -1546,8 +1616,23 @@ function setupEventListeners() {
     document.getElementById('cancelMaintenancePrintBtn').addEventListener('click', () => {
         document.getElementById('maintenancePrintModal').style.display = 'none';
     });
-    document.getElementById('confirmMaintenancePrintBtn').addEventListener('click', printMaintenanceJournal);
-    document.getElementById('saveMaintenancePdfBtn').addEventListener('click', saveMaintenancePdf);
+    document.getElementById('confirmMaintenancePrintBtn').addEventListener('click', () => {
+        if (maintenancePrintMode === 'save') {
+            saveMaintenancePdf();
+        } else {
+            printMaintenanceJournal();
+        }
+    });
+    document.getElementById('saveMaintenancePdfBtn').addEventListener('click', () => {
+        collectMaintenanceFromDOM();
+        if (maintenanceRecords.length === 0) { showToast('Нет записей', 'info'); return; }
+        maintenancePrintMode = 'save';
+        document.getElementById('maintenancePrintDateFrom').value = '';
+        document.getElementById('maintenancePrintDateTo').value = '';
+        document.querySelector('#maintenancePrintModal .modal-header h2').textContent = '💾 Сохранение журнала в PDF';
+        document.getElementById('confirmMaintenancePrintBtn').textContent = '💾 Сохранить';
+        document.getElementById('maintenancePrintModal').style.display = 'flex';
+    });
     document.getElementById('openMaintenanceReportsFolderBtn').addEventListener('click', () => {
         api.openMaintenanceReportsFolder();
     });

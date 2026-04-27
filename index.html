@@ -280,10 +280,11 @@
                 </div>
 
                 <div class="form-group full-width">
-                    <label for="vehicleSelect">Выбрать ТС из списка</label>
-                    <select id="vehicleSelect" class="form-control">
-                        <option value="">— или выбрать из списка техники —</option>
-                    </select>
+                    <label>Выбрать ТС из списка</label>
+                    <div class="vehicle-search-wrapper">
+                        <input type="text" id="vehicleSearchSelect" class="form-control" placeholder="🔍 Поиск техники..." autocomplete="off">
+                        <div id="vehicleSearchDropdown" class="vehicle-search-dropdown" style="display:none;"></div>
+                    </div>
                 </div>
 
                 <div class="form-row">
@@ -370,10 +371,11 @@
                 </div>
 
                 <div class="form-group full-width">
-                    <label for="batchVehicleSelect">Выбрать ТС из списка</label>
-                    <select id="batchVehicleSelect" class="form-control">
-                        <option value="">— или выбрать из списка техники —</option>
-                    </select>
+                    <label>Выбрать ТС из списка</label>
+                    <div class="vehicle-search-wrapper">
+                        <input type="text" id="batchVehicleSearchSelect" class="form-control" placeholder="🔍 Поиск техники..." autocomplete="off">
+                        <div id="batchVehicleSearchDropdown" class="vehicle-search-dropdown" style="display:none;"></div>
+                    </div>
                 </div>
 
                 <div class="form-row">
@@ -439,6 +441,13 @@
 
             <div class="vehicles-search">
                 <input type="text" id="vehicleSearchInput" class="form-control" placeholder="🔍 Поиск по марке или номеру...">
+            </div>
+
+            <div class="vehicles-filter">
+                <label class="filter-checkbox-label">
+                    <input type="checkbox" id="vehiclesWithMaintenanceFilter">
+                    <span>Только техника с ТО</span>
+                </label>
             </div>
 
             <div id="vehiclesList" class="vehicles-list"></div>
